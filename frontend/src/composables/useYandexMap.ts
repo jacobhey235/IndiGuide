@@ -1,0 +1,96 @@
+import { onMounted, onUnmounted, ref, shallowRef } from 'vue'
+
+export function useYandexMap(containerId: string, initialCenter: [number, number] = [55.7558, 37.6173]) {
+  // shallowRef prevents Vue from wrapping the Yandex Maps instance in a deep reactive proxy,
+  // which breaks internal Yandex Maps event handling and degrades performance over time.
+  const mapInstance = shallowRef<ymaps.Map | null>(null)
+  const isReady = ref(false)
+  let _clickHandler: ((e: ymaps.MapEvent) => void) | null = null
+
+  onMounted(async () => {
+    await ymaps.ready()
+    mapInstance.value = new ymaps.Map(containerId, { center: initialCenter, zoom: 13 }, {
+      suppressMapOpenBlock: true,
+    })
+    isReady.value = true
+  })
+
+  onUnmounted(() => {
+    if (_clickHandler) {
+      mapInstance.value?.events.remove('click', _clickHandler)
+      _clickHandler = null
+    }
+    mapInstance.value?.destroy()
+    mapInstance.value = null
+    isReady.value = false
+  })
+
+  function clearObjects() {
+    mapInstance.value?.geoObjects.removeAll()
+  }
+
+  function addPlacemark(
+    lat: number,
+    lon: number,
+    props: ymaps.PlacemarkProperties = {},
+    opts: ymaps.PlacemarkOptions = {},
+  ): ymaps.Placemark {
+    const mark = new ymaps.Placemark([lat, lon], props, opts)
+    mapInstance.value?.geoObjects.add(mark)
+    return mark
+  }
+
+  function drawRoute(
+    geojson: { type: string; coordinates: [number, number][] },
+    overrides: ymaps.PolylineOptions = {},
+  ) {
+    // GeoJSON [lon, lat] → Yandex Maps [lat, lon]
+    const coords = geojson.coordinates.map(([lon, lat]): [number, number] => [lat, lon])
+    const polyline = new ymaps.Polyline(coords, {}, {
+      strokeColor: '#3b82f6',
+      strokeWidth: 4,
+      strokeOpacity: 0.85,
+      ...overrides,
+    })
+    mapInstance.value?.geoObjects.add(polyline)
+    return polyline
+  }
+
+  // Straight-line segment between two [lat, lon] points (used for active-leg highlight)
+  function drawSegment(
+    from: [number, number],
+    to: [number, number],
+    overrides: ymaps.PolylineOptions = {},
+  ) {
+    const polyline = new ymaps.Polyline([from, to], {}, {
+      strokeColor: '#2563eb',
+      strokeWidth: 6,
+      strokeOpacity: 1.0,
+      ...overrides,
+    })
+    mapInstance.value?.geoObjects.add(polyline)
+    return polyline
+  }
+
+  function onMapClick(handler: (lat: number, lon: number) => void) {
+    if (_clickHandler) {
+      mapInstance.value?.events.remove('click', _clickHandler)
+    }
+    _clickHandler = (e) => {
+      const coords = e.get('coords') as [number, number]
+      handler(coords[0], coords[1])
+    }
+    mapInstance.value?.events.add('click', _clickHandler)
+  }
+
+  function panTo(lat: number, lon: number, zoom = 15) {
+    mapInstance.value?.setCenter([lat, lon], zoom)
+  }
+
+  function fitViewport() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(mapInstance.value as any)?.container?.fitToViewport()
+  }
+
+  return { mapInstance, isReady, clearObjects, addPlacemark, drawRoute, drawSegment, onMapClick, panTo, fitViewport }
+}
