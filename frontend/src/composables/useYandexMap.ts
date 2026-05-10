@@ -1,5 +1,7 @@
 import { onMounted, onUnmounted, ref, shallowRef } from 'vue'
 
+const LEG_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#8b5cf6', '#ec4899']
+
 export function useYandexMap(containerId: string, initialCenter: [number, number] = [55.7558, 37.6173]) {
   // shallowRef prevents Vue from wrapping the Yandex Maps instance in a deep reactive proxy,
   // which breaks internal Yandex Maps event handling and degrades performance over time.
@@ -56,6 +58,22 @@ export function useYandexMap(containerId: string, initialCenter: [number, number
     return polyline
   }
 
+  function drawSegmentedRoute(
+    legs: Array<{ type: string; coordinates: [number, number][] }>,
+    overrides: ymaps.PolylineOptions = {},
+  ) {
+    legs.forEach((leg, i) => {
+      const coords = leg.coordinates.map(([lon, lat]): [number, number] => [lat, lon])
+      const polyline = new ymaps.Polyline(coords, {}, {
+        strokeColor: LEG_COLORS[i % LEG_COLORS.length],
+        strokeWidth: 4,
+        strokeOpacity: 0.85,
+        ...overrides,
+      })
+      mapInstance.value?.geoObjects.add(polyline)
+    })
+  }
+
   // Straight-line segment between two [lat, lon] points (used for active-leg highlight)
   function drawSegment(
     from: [number, number],
@@ -92,5 +110,5 @@ export function useYandexMap(containerId: string, initialCenter: [number, number
     ;(mapInstance.value as any)?.container?.fitToViewport()
   }
 
-  return { mapInstance, isReady, clearObjects, addPlacemark, drawRoute, drawSegment, onMapClick, panTo, fitViewport }
+  return { mapInstance, isReady, clearObjects, addPlacemark, drawRoute, drawSegmentedRoute, drawSegment, onMapClick, panTo, fitViewport }
 }

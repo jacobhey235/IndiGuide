@@ -18,7 +18,7 @@ const emit = defineEmits<{
   'point-selected': [lat: number, lon: number]
 }>()
 
-const { isReady, clearObjects, addPlacemark, drawRoute, drawSegment, onMapClick, panTo, fitViewport } =
+const { isReady, clearObjects, addPlacemark, drawRoute, drawSegmentedRoute, drawSegment, onMapClick, panTo, fitViewport } =
   useYandexMap('yandex-map')
 
 watch(isReady, (ready) => {
@@ -48,7 +48,9 @@ function renderRoute() {
   const isActive = props.route.status === 'active'
   const sorted = [...props.route.waypoints].sort((a, b) => a.order_index - b.order_index)
 
-  if (props.route.osrm_geometry) {
+  if (props.route.leg_geometries?.length) {
+    drawSegmentedRoute(props.route.leg_geometries, isActive ? { strokeOpacity: 0.2 } : {})
+  } else if (props.route.osrm_geometry) {
     drawRoute(props.route.osrm_geometry, isActive ? { strokeOpacity: 0.2 } : {})
   }
 

@@ -31,6 +31,7 @@ class RouteOut(BaseModel):
     start_lat: float
     total_distance_m: float
     osrm_geometry: dict | None
+    leg_geometries: list[dict] | None
     created_at: datetime
     started_at: datetime | None
     ended_at: datetime | None
@@ -59,7 +60,7 @@ class RouteGenerateRequest(BaseModel):
     start_lon: float
     distance_m: float = Field(ge=500, le=20_000)
     num_pois: int = Field(ge=2, le=15)
-    is_circular: bool = True
+    is_circular: bool = False
     name: str | None = None
 
 
@@ -68,3 +69,9 @@ class RouteUpdateRequest(BaseModel):
     waypoint_order: list[str] | None = None   # poi_xids in desired order
     remove_poi_xids: list[str] | None = None
     is_saved: bool | None = None
+
+
+class NavigationResponse(BaseModel):
+    geometry: dict      # GeoJSON LineString of the walking route
+    distance_m: float
+    duration_s: float

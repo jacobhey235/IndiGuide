@@ -42,6 +42,7 @@ class Route(Base):
     start_lat: Mapped[float] = mapped_column(Float, nullable=False)
     total_distance_m: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     osrm_geometry: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    leg_geometries: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

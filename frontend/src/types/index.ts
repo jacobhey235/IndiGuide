@@ -39,6 +39,7 @@ export interface Route {
   start_lat: number
   total_distance_m: number
   osrm_geometry?: { type: 'LineString'; coordinates: [number, number][] } | null
+  leg_geometries?: Array<{ type: 'LineString'; coordinates: [number, number][] }> | null
   created_at: string
   started_at?: string | null
   ended_at?: string | null
