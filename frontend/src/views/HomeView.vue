@@ -16,13 +16,13 @@
             class="rounded-full bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
             @click="$router.push('/profile')"
           >
-            Profile
+            Профиль
           </button>
           <button
             class="rounded-full bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
             @click="auth.isAuthenticated() ? auth.logout() : (showAuth = true)"
           >
-            {{ auth.isAuthenticated() ? 'Sign out' : 'Sign in' }}
+            {{ auth.isAuthenticated() ? 'Выйти' : 'Войти' }}
           </button>
         </div>
       </div>
@@ -32,29 +32,28 @@
         <div class="px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <p class="font-semibold text-gray-900">{{ generatedRoute.name }}</p>
           <p class="text-sm text-gray-500 mt-0.5">
-            {{ (generatedRoute.total_distance_m / 1000).toFixed(1) }} km ·
-            {{ generatedRoute.waypoints.length }} stops ·
-            {{ generatedRoute.is_circular ? 'Circular' : 'One-way' }}
+            {{ (generatedRoute.total_distance_m / 1000).toFixed(1) }} км ·
+            {{ generatedRoute.waypoints.length }} остановок
           </p>
           <div class="flex gap-2 mt-3">
             <button
               class="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors min-h-[44px]"
               @click="startWalk"
             >
-              Start walk
+              Начать прогулку
             </button>
             <button
               class="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors min-h-[44px]"
               @click="$router.push(`/routes/${generatedRoute!.id}`)"
             >
-              Details
+              Подробнее
             </button>
           </div>
           <button
             class="mt-2 w-full text-center text-sm text-gray-400 py-1 hover:text-gray-600 transition-colors"
             @click="generatedRoute = null"
           >
-            Generate a new route
+            Создать новый маршрут
           </button>
         </div>
 
@@ -73,13 +72,13 @@
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-gray-900 truncate">{{ wp.poi.name }}</p>
               <p v-if="wp.leg_duration_s" class="text-xs text-gray-400">
-                ~{{ Math.round(wp.leg_duration_s / 60) }} min walk
+                ~{{ Math.round(wp.leg_duration_s / 60) }} мин ходьбы
               </p>
             </div>
             <button
               v-if="generatedRoute.status === 'draft'"
               class="p-1.5 text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"
-              title="Remove"
+              title="Удалить"
               @click="removeWaypoint(wp.poi.xid)"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -91,7 +90,7 @@
               class="text-xs font-medium text-blue-600 bg-blue-50 rounded-lg px-2 py-1 flex-shrink-0 hover:bg-blue-100 transition-colors"
               @click="markVisited(wp.id)"
             >
-              Visited
+              Посещено
             </button>
           </div>
         </div>
@@ -128,13 +127,13 @@
           class="rounded-full bg-white/90 px-4 py-2 text-sm font-medium text-gray-700 shadow backdrop-blur min-h-[44px]"
           @click="$router.push('/profile')"
         >
-          Profile
+          Профиль
         </button>
         <button
           class="rounded-full bg-white/90 px-4 py-2 text-sm font-medium text-gray-700 shadow backdrop-blur min-h-[44px]"
           @click="auth.isAuthenticated() ? auth.logout() : (showAuth = true)"
         >
-          {{ auth.isAuthenticated() ? 'Sign out' : 'Sign in' }}
+          {{ auth.isAuthenticated() ? 'Выйти' : 'Войти' }}
         </button>
       </div>
     </div>
@@ -153,7 +152,7 @@
       >
         <div class="h-1.5 w-10 rounded-full bg-gray-300" />
         <span v-if="!drawerOpen" class="mt-1.5 text-sm font-semibold text-blue-600">
-          {{ generatedRoute ? 'View route options' : 'Plan a route' }}
+          {{ generatedRoute ? 'Показать маршрут' : 'Создать маршрут' }}
         </span>
       </div>
 
@@ -162,9 +161,8 @@
           <div class="mb-3">
             <p class="font-semibold text-gray-900">{{ generatedRoute.name }}</p>
             <p class="text-sm text-gray-500">
-              {{ (generatedRoute.total_distance_m / 1000).toFixed(1) }} km ·
-              {{ generatedRoute.waypoints.length }} stops ·
-              {{ generatedRoute.is_circular ? 'Circular' : 'One-way' }}
+              {{ (generatedRoute.total_distance_m / 1000).toFixed(1) }} км ·
+              {{ generatedRoute.waypoints.length }} остановок
             </p>
           </div>
           <div class="flex gap-2">
@@ -172,20 +170,20 @@
               class="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-700 min-h-[48px]"
               @click="$router.push(`/routes/${generatedRoute!.id}`)"
             >
-              Details & edit
+              Детали
             </button>
             <button
               class="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white min-h-[48px]"
               @click="startWalk"
             >
-              Start walk
+              Начать прогулку
             </button>
           </div>
           <button
             class="mt-2 w-full text-center text-sm text-gray-400 py-1"
             @click="generatedRoute = null"
           >
-            Generate a new route
+            Создать новый маршрут
           </button>
         </div>
 
@@ -287,7 +285,7 @@ function onPointSelected(lat: number, lon: number) {
   if (!drawerOpen.value) drawerOpen.value = true
 }
 
-async function onGenerate(req: { distance_m: number; num_pois: number; is_circular: boolean }) {
+async function onGenerate(req: { distance_m: number; num_pois: number; selected_categories: string[] }) {
   if (!auth.isAuthenticated()) { showAuth.value = true; return }
   if (!startLat.value || !startLon.value) return
 
@@ -301,7 +299,7 @@ async function onGenerate(req: { distance_m: number; num_pois: number; is_circul
     drawerOpen.value = false
   } catch (e: unknown) {
     const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-    errorMsg.value = msg ?? 'Could not generate route. Please try again.'
+    errorMsg.value = msg ?? 'Не удалось создать маршрут. Попробуйте ещё раз.'
     setTimeout(() => { errorMsg.value = '' }, 4000)
   }
 }
@@ -319,7 +317,7 @@ async function removeWaypoint(poiXid: string) {
       remove_poi_xids: [poiXid],
     })
   } catch {
-    errorMsg.value = 'Could not remove POI'
+    errorMsg.value = 'Не удалось удалить объект'
     setTimeout(() => { errorMsg.value = '' }, 3000)
   }
 }
@@ -329,7 +327,7 @@ async function markVisited(waypointId: number) {
   try {
     generatedRoute.value = await routesStore.visitWaypoint(generatedRoute.value.id, waypointId)
   } catch {
-    errorMsg.value = 'Could not mark as visited'
+    errorMsg.value = 'Не удалось отметить как посещённое'
     setTimeout(() => { errorMsg.value = '' }, 3000)
   }
 }

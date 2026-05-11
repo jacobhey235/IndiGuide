@@ -37,6 +37,7 @@ declare namespace ymaps {
     events: EventManager
     setCenter(coords: [number, number], zoom?: number, options?: object): Promise<void>
     getBounds(): [[number, number], [number, number]]
+    setBounds(bounds: [[number, number], [number, number]], options?: object): Promise<void>
     destroy(): void
   }
 

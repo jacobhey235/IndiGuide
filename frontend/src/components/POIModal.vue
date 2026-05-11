@@ -50,12 +50,12 @@
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
             </svg>
-            Loading description…
+            Загрузка описания…
           </div>
           <div v-else-if="detail?.wikipedia_excerpt" class="prose prose-sm max-w-none text-gray-700">
             <p class="leading-relaxed">{{ detail.wikipedia_excerpt }}</p>
           </div>
-          <p v-else class="text-sm text-gray-400 italic">No description available.</p>
+          <p v-else class="text-sm text-gray-400 italic">Описание недоступно.</p>
         </div>
       </div>
     </div>

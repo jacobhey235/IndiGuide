@@ -33,7 +33,6 @@ export interface Route {
   id: string
   name: string
   status: RouteStatus
-  is_circular: boolean
   is_saved: boolean
   start_lon: number
   start_lat: number
@@ -51,7 +50,7 @@ export interface GenerateRouteRequest {
   start_lon: number
   distance_m: number
   num_pois: number
-  is_circular: boolean
+  selected_categories: string[]
   name?: string
 }
 

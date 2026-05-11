@@ -29,7 +29,7 @@ async def _get_user_route(route_id: uuid.UUID, user: User, db: AsyncSession) -> 
     )
     route = result.scalar_one_or_none()
     if route is None or route.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Route not found")
+        raise HTTPException(status_code=404, detail="Маршрут не найден")
     return route
 
 
@@ -49,13 +49,13 @@ async def generate(
             start_lon=body.start_lon,
             distance_m=body.distance_m,
             num_pois=body.num_pois,
-            is_circular=body.is_circular,
+            selected_categories=body.selected_categories,
             name=body.name,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=503, detail=f"External service error: {e.response.status_code}")
+        raise HTTPException(status_code=503, detail=f"Ошибка внешнего сервиса: {e.response.status_code}")
 
     result = await db.execute(
         select(Route).options(_ROUTE_OPTIONS).where(Route.id == route.id)
@@ -128,9 +128,9 @@ async def update_route(
             osrm = OSRMClient(request.app.state.http_client)
             wps = [(route.start_lat, route.start_lon)] + [(w.poi.lat, w.poi.lon) for w in remaining]
             try:
-                trip = await osrm.get_trip(wps) if route.is_circular else await osrm.get_route(wps)
+                trip = await osrm.get_route(wps)
             except httpx.HTTPStatusError as e:
-                raise HTTPException(status_code=503, detail=f"Routing service error: {e.response.status_code}")
+                raise HTTPException(status_code=503, detail=f"Ошибка службы маршрутизации: {e.response.status_code}")
             route.osrm_geometry = trip.geometry
             route.leg_geometries = trip.leg_geometries
             route.total_distance_m = trip.distance_m
@@ -170,7 +170,7 @@ async def navigate_to_waypoint(
     route = await _get_user_route(route_id, user, db)
     wp = next((w for w in route.waypoints if w.id == waypoint_id), None)
     if wp is None:
-        raise HTTPException(status_code=404, detail="Waypoint not found")
+        raise HTTPException(status_code=404, detail="Точка маршрута не найдена")
 
     osrm = OSRMClient(request.app.state.http_client)
     try:
@@ -196,7 +196,7 @@ async def start_route(
 ):
     route = await _get_user_route(route_id, user, db)
     if route.status != RouteStatus.draft:
-        raise HTTPException(status_code=400, detail="Route is not in draft status")
+        raise HTTPException(status_code=400, detail="Маршрут не является черновиком")
     route.status = RouteStatus.active
     route.started_at = datetime.now(timezone.utc)
     await db.commit()
@@ -211,7 +211,7 @@ async def end_route(
 ):
     route = await _get_user_route(route_id, user, db)
     if route.status != RouteStatus.active:
-        raise HTTPException(status_code=400, detail="Route is not active")
+        raise HTTPException(status_code=400, detail="Маршрут не активен")
 
     all_visited = all(w.is_visited for w in route.waypoints)
     route.status = RouteStatus.completed if all_visited else RouteStatus.abandoned
@@ -229,11 +229,11 @@ async def visit_waypoint(
 ):
     route = await _get_user_route(route_id, user, db)
     if route.status != RouteStatus.active:
-        raise HTTPException(status_code=400, detail="Route is not active")
+        raise HTTPException(status_code=400, detail="Маршрут не активен")
 
     wp = next((w for w in route.waypoints if w.id == waypoint_id), None)
     if wp is None:
-        raise HTTPException(status_code=404, detail="Waypoint not found")
+        raise HTTPException(status_code=404, detail="Точка маршрута не найдена")
 
     wp.is_visited = True
     wp.visited_at = datetime.now(timezone.utc)

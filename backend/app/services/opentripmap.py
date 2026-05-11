@@ -40,12 +40,13 @@ class OpenTripMapClient:
         lon: float,
         radius_m: int,
         limit: int = 30,
+        kinds: list[str] | None = None,
     ) -> list[OTMPlace]:
         params = {
             "radius": radius_m,
             "lon": lon,
             "lat": lat,
-            "kinds": "interesting_places",
+            "kinds": ",".join(kinds) if kinds else "interesting_places",
             "rate": "1",
             "limit": limit,
             "format": "json",

@@ -18,7 +18,7 @@ const emit = defineEmits<{
   'point-selected': [lat: number, lon: number]
 }>()
 
-const { isReady, clearObjects, addPlacemark, drawRoute, drawSegmentedRoute, drawSegment, onMapClick, panTo, fitViewport } =
+const { isReady, clearObjects, addPlacemark, drawRoute, drawSegmentedRoute, drawSegment, onMapClick, panTo, fitToBounds, fitViewport } =
   useYandexMap('yandex-map')
 
 watch(isReady, (ready) => {
@@ -38,7 +38,7 @@ function renderRoute() {
   clearObjects()
 
   if (props.selectedLat != null && props.selectedLon != null) {
-    addPlacemark(props.selectedLat, props.selectedLon, { hintContent: 'Start point' }, {
+    addPlacemark(props.selectedLat, props.selectedLon, { hintContent: 'Начальная точка' }, {
       preset: 'islands#greenDotIcon',
     })
   }
@@ -48,20 +48,32 @@ function renderRoute() {
   const isActive = props.route.status === 'active'
   const sorted = [...props.route.waypoints].sort((a, b) => a.order_index - b.order_index)
 
+  addPlacemark(
+    props.route.start_lat,
+    props.route.start_lon,
+    { hintContent: 'Начало маршрута' },
+    { preset: 'islands#greenDotIcon' },
+  )
+
   if (props.route.leg_geometries?.length) {
-    drawSegmentedRoute(props.route.leg_geometries, isActive ? { strokeOpacity: 0.2 } : {})
+    drawSegmentedRoute(props.route.leg_geometries, isActive ? { strokeOpacity: 0.45, strokeColor: '#64748b' } : {})
   } else if (props.route.osrm_geometry) {
-    drawRoute(props.route.osrm_geometry, isActive ? { strokeOpacity: 0.2 } : {})
+    drawRoute(props.route.osrm_geometry, isActive ? { strokeOpacity: 0.45, strokeColor: '#64748b' } : {})
   }
 
   if (isActive) {
     const lastVisited = [...sorted].reverse().find(wp => wp.is_visited)
     const nextUnvisited = sorted.find(wp => !wp.is_visited)
     if (nextUnvisited) {
-      const from: [number, number] = lastVisited
-        ? [lastVisited.poi.lat, lastVisited.poi.lon]
-        : [props.route.start_lat, props.route.start_lon]
-      drawSegment(from, [nextUnvisited.poi.lat, nextUnvisited.poi.lon])
+      const legGeom = props.route.leg_geometries?.[nextUnvisited.order_index]
+      if (legGeom) {
+        drawRoute(legGeom, { strokeColor: '#2563eb', strokeWidth: 5, strokeOpacity: 1.0 })
+      } else {
+        const from: [number, number] = lastVisited
+          ? [lastVisited.poi.lat, lastVisited.poi.lon]
+          : [props.route.start_lat, props.route.start_lon]
+        drawSegment(from, [nextUnvisited.poi.lat, nextUnvisited.poi.lon])
+      }
     }
   }
 
@@ -81,5 +93,23 @@ function renderRoute() {
   })
 }
 
-defineExpose({ panTo, fitViewport, clearObjects })
+function focusActiveLeg() {
+  if (!props.route) return
+  const sorted = [...props.route.waypoints].sort((a, b) => a.order_index - b.order_index)
+  const nextUnvisited = sorted.find(wp => !wp.is_visited)
+  if (!nextUnvisited) return
+  const legGeom = props.route.leg_geometries?.[nextUnvisited.order_index]
+  if (legGeom) {
+    const latLons = legGeom.coordinates.map(([lon, lat]): [number, number] => [lat, lon])
+    fitToBounds(latLons)
+  } else {
+    const lastVisited = [...sorted].reverse().find(wp => wp.is_visited)
+    const from: [number, number] = lastVisited
+      ? [lastVisited.poi.lat, lastVisited.poi.lon]
+      : [props.route.start_lat, props.route.start_lon]
+    fitToBounds([from, [nextUnvisited.poi.lat, nextUnvisited.poi.lon]])
+  }
+}
+
+defineExpose({ panTo, fitViewport, clearObjects, focusActiveLeg })
 </script>

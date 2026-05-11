@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import asyncio
 from dataclasses import dataclass
 
 import httpx
@@ -12,7 +15,7 @@ class OSRMTrip:
     distance_m: float
     duration_s: float
     leg_durations: list[int]  # seconds per leg
-    ordered_indices: list[int]  # re-ordered input indices (excluding start anchor)
+    ordered_indices: list[int]  # visit order of input indices (excluding start)
     leg_geometries: list[dict]  # per-leg GeoJSON LineStrings
 
 
@@ -21,55 +24,53 @@ class OSRMClient:
         self._client = client
         self._base = settings.OSRM_BASE_URL
 
-    async def get_trip(
+    async def get_pairwise_routes(
         self,
-        waypoints: list[tuple[float, float]],  # [(lat, lon), ...], start is index 0
+        waypoints: list[tuple[float, float]],  # [(lat, lon), ...], in desired visit order
     ) -> OSRMTrip:
-        """Circular tour: OSRM optimises waypoint order and returns to start."""
-        coords = ";".join(f"{lon},{lat}" for lat, lon in waypoints)
-        params: dict = {
-            "overview": "full",
-            "geometries": "polyline",
-            "annotations": "false",
-            "roundtrip": "true",
-            "source": "first",
-            "steps": "true",
-        }
-        url = f"{self._base}/trip/v1/walking/{coords}"
-        resp = await self._client.get(url, params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        """Build a route by calling OSRM independently for each consecutive pair, in parallel."""
+        if len(waypoints) < 2:
+            raise ValueError("Need at least 2 waypoints.")
 
-        if not data.get("trips"):
-            raise ValueError("OSRM returned no trips for these coordinates.")
+        async def _segment(a: tuple[float, float], b: tuple[float, float]) -> dict:
+            coords = f"{a[1]},{a[0]};{b[1]},{b[0]}"
+            params = {"overview": "full", "geometries": "polyline", "steps": "true"}
+            resp = await self._client.get(
+                f"{self._base}/route/v1/walking/{coords}", params=params
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if not data.get("routes"):
+                raise ValueError(f"OSRM returned no route for {a} -> {b}.")
+            route = data["routes"][0]
+            leg = route["legs"][0]
+            return {
+                "geometry": _decode_polyline(route["geometry"]),
+                "distance_m": float(route["distance"]),
+                "duration_s": float(route["duration"]),
+                "leg_duration": int(leg["duration"]),
+                "leg_geometry": _leg_geometry_from_steps(leg["steps"]),
+            }
 
-        trip = data["trips"][0]
-        osrm_waypoints = data["waypoints"]
+        pairs = list(zip(waypoints[:-1], waypoints[1:]))
+        segments = await asyncio.gather(*[_segment(a, b) for a, b in pairs])
 
-        geometry = _decode_polyline(trip["geometry"])
-        # Guarantee the geometry closes — OSRM snapping can leave a tiny gap.
-        if geometry["coordinates"] and geometry["coordinates"][-1] != geometry["coordinates"][0]:
-            geometry["coordinates"].append(geometry["coordinates"][0])
+        merged_coords: list[list[float]] = []
+        for seg in segments:
+            coords = seg["geometry"]["coordinates"]
+            if merged_coords and coords:
+                merged_coords.extend(coords[1:] if coords[0] == merged_coords[-1] else coords)
+            else:
+                merged_coords.extend(coords)
 
-        distance_m = float(trip["distance"])
-        duration_s = float(trip["duration"])
-        leg_durations = [int(leg["duration"]) for leg in trip["legs"]]
-        leg_geometries = [_leg_geometry_from_steps(leg["steps"]) for leg in trip["legs"]]
-
-        poi_count = len(waypoints) - 1
-        poi_input_indices = list(range(1, poi_count + 1))
-        ordered_indices = sorted(
-            poi_input_indices,
-            key=lambda i: osrm_waypoints[i]["waypoint_index"],
-        )
-
+        n = len(waypoints) - 1
         return OSRMTrip(
-            geometry=geometry,
-            distance_m=distance_m,
-            duration_s=duration_s,
-            leg_durations=leg_durations,
-            ordered_indices=ordered_indices,
-            leg_geometries=leg_geometries,
+            geometry={"type": "LineString", "coordinates": merged_coords},
+            distance_m=sum(s["distance_m"] for s in segments),
+            duration_s=sum(s["duration_s"] for s in segments),
+            leg_durations=[s["leg_duration"] for s in segments],
+            ordered_indices=list(range(1, n + 1)),
+            leg_geometries=[s["leg_geometry"] for s in segments],
         )
 
     async def get_route(

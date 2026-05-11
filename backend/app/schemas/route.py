@@ -25,7 +25,6 @@ class RouteOut(BaseModel):
     id: uuid.UUID
     name: str
     status: RouteStatus
-    is_circular: bool
     is_saved: bool
     start_lon: float
     start_lat: float
@@ -44,7 +43,6 @@ class RouteSummary(BaseModel):
     id: uuid.UUID
     name: str
     status: RouteStatus
-    is_circular: bool
     is_saved: bool
     total_distance_m: float
     created_at: datetime
@@ -60,7 +58,7 @@ class RouteGenerateRequest(BaseModel):
     start_lon: float
     distance_m: float = Field(ge=500, le=20_000)
     num_pois: int = Field(ge=2, le=15)
-    is_circular: bool = False
+    selected_categories: list[str] = Field(min_length=1, max_length=7)
     name: str | None = None
 
 

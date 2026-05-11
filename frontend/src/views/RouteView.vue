@@ -18,9 +18,9 @@
         <div class="flex-1 min-w-0">
           <h1 class="font-bold text-gray-900 truncate">{{ route?.name }}</h1>
           <p class="text-xs text-gray-500" v-if="route">
-            {{ (route.total_distance_m / 1000).toFixed(1) }} km ·
-            {{ route.waypoints.length }} stops ·
-            <span :class="statusColor">{{ route.status }}</span>
+            {{ (route.total_distance_m / 1000).toFixed(1) }} км ·
+            {{ route.waypoints.length }} остановок ·
+            <span :class="statusColor">{{ statusLabel(route.status) }}</span>
           </p>
         </div>
         <button
@@ -29,13 +29,13 @@
           :class="editMode ? 'text-blue-600' : 'text-gray-500'"
           @click="editMode = !editMode"
         >
-          {{ editMode ? 'Done' : 'Edit' }}
+          {{ editMode ? 'Готово' : 'Изменить' }}
         </button>
       </div>
 
       <!-- Waypoint list -->
       <div class="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        <div v-if="!route" class="flex items-center justify-center h-full text-gray-400">Loading…</div>
+        <div v-if="!route" class="flex items-center justify-center h-full text-gray-400">Загрузка…</div>
 
         <POICard
           v-for="(wp, i) in route?.waypoints"
@@ -59,20 +59,20 @@
             :disabled="!route || route.waypoints.length < 2"
             @click="startWalk"
           >
-            Start walk
+            Начать прогулку
           </button>
           <button
             v-if="!route.is_saved"
             class="rounded-xl border border-blue-200 px-4 py-3.5 text-sm font-medium text-blue-600 min-h-[48px]"
             @click="saveAndViewProfile"
           >
-            Save
+            Сохранить
           </button>
           <button
             class="rounded-xl border border-red-200 px-4 py-3.5 text-sm font-medium text-red-500 min-h-[48px]"
             @click="deleteAndBack"
           >
-            Delete
+            Удалить
           </button>
         </template>
         <template v-else-if="route?.status === 'active'">
@@ -80,7 +80,7 @@
             class="flex-1 rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white min-h-[48px]"
             @click="$router.push(`/routes/${route.id}/walk`)"
           >
-            Continue walk
+            Продолжить прогулку
           </button>
         </template>
         <template v-else-if="route?.status === 'completed' || route?.status === 'abandoned'">
@@ -90,20 +90,20 @@
             :disabled="saving"
             @click="saveAndViewProfile"
           >
-            {{ saving ? '…' : 'Save to profile' }}
+            {{ saving ? '…' : 'Сохранить в профиль' }}
           </button>
           <button
             v-else
             class="flex-1 rounded-xl bg-green-500 py-3.5 text-sm font-semibold text-white min-h-[48px]"
             @click="$router.push('/profile')"
           >
-            View in profile
+            В профиле
           </button>
           <button
             class="rounded-xl border border-gray-200 px-4 py-3.5 text-sm font-medium text-gray-500 min-h-[48px]"
             @click="$router.push('/')"
           >
-            Go home
+            На главную
           </button>
         </template>
       </div>
@@ -120,7 +120,7 @@ import AppMap from '@/components/AppMap.vue'
 import POICard from '@/components/POICard.vue'
 import POIModal from '@/components/POIModal.vue'
 import { useRoutesStore } from '@/stores/routes'
-import type { POI } from '@/types'
+import type { POI, RouteStatus } from '@/types'
 
 const vRoute = useRoute()
 const router = useRouter()
@@ -138,6 +138,15 @@ const statusColor = computed(() => ({
   completed: 'text-green-600',
   abandoned: 'text-orange-500',
 }[route.value?.status ?? 'draft']))
+
+function statusLabel(status: RouteStatus) {
+  return {
+    draft: 'черновик',
+    active: 'активный',
+    completed: 'завершён',
+    abandoned: 'прерван',
+  }[status]
+}
 
 onMounted(() => store.fetchRoute(vRoute.params.id as string))
 

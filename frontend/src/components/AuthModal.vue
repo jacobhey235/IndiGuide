@@ -12,25 +12,25 @@
             :class="tab === 'login' ? 'bg-white shadow text-gray-900' : 'text-gray-500'"
             @click="tab = 'login'"
           >
-            Sign in
+            Войти
           </button>
           <button
             class="flex-1 rounded-lg py-2 text-sm font-medium transition-colors"
             :class="tab === 'register' ? 'bg-white shadow text-gray-900' : 'text-gray-500'"
             @click="tab = 'register'"
           >
-            Create account
+            Регистрация
           </button>
         </div>
 
         <form @submit.prevent="submit" class="space-y-4">
           <div v-if="tab === 'register'">
-            <label class="mb-1 block text-sm font-medium text-gray-700">Username</label>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Имя пользователя</label>
             <input
               v-model="form.username"
               type="text"
               class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="Your name"
+              placeholder="Ваше имя"
               required
             />
           </div>
@@ -47,7 +47,7 @@
           </div>
 
           <div>
-            <label class="mb-1 block text-sm font-medium text-gray-700">Password</label>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Пароль</label>
             <input
               v-model="form.password"
               type="password"
@@ -65,7 +65,7 @@
             :disabled="loading"
             class="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50 min-h-[48px]"
           >
-            {{ loading ? 'Please wait…' : tab === 'login' ? 'Sign in' : 'Create account' }}
+            {{ loading ? 'Подождите…' : tab === 'login' ? 'Войти' : 'Создать аккаунт' }}
           </button>
         </form>
       </div>
@@ -97,7 +97,7 @@ async function submit() {
     emit('close')
   } catch (e: unknown) {
     const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-    error.value = msg ?? 'Something went wrong'
+    error.value = msg ?? 'Что-то пошло не так'
   } finally {
     loading.value = false
   }

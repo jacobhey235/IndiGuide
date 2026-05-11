@@ -15,7 +15,7 @@
         <!-- Progress bar -->
         <div class="flex-1">
           <div class="mb-1 flex justify-between text-xs text-white/80">
-            <span>{{ visitedCount }} of {{ totalCount }} stops</span>
+            <span>{{ visitedCount }} из {{ totalCount }} остановок</span>
             <span>{{ Math.round(progressPct) }}%</span>
           </div>
           <div class="h-2 rounded-full bg-white/30">
@@ -37,12 +37,12 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
           </svg>
-          ~{{ Math.ceil(nextWaypoint.leg_duration_s / 60) }} min walk
+          ~{{ Math.ceil(nextWaypoint.leg_duration_s / 60) }} мин ходьбы
         </div>
 
         <h2 class="text-xl font-bold text-gray-900 mb-1">{{ nextWaypoint.poi.name }}</h2>
         <p class="text-sm text-gray-400">
-          Stop {{ nextIndex + 1 }} of {{ totalCount }}
+          Остановка {{ nextIndex + 1 }} из {{ totalCount }}
         </p>
 
         <div class="mt-2 flex flex-wrap gap-1">
@@ -57,8 +57,8 @@
       </div>
 
       <div v-else class="mb-4 text-center py-4">
-        <p class="text-2xl font-bold text-green-600 mb-1">Route complete!</p>
-        <p class="text-sm text-gray-500">You've visited all {{ totalCount }} stops</p>
+        <p class="text-2xl font-bold text-green-600 mb-1">Маршрут завершён!</p>
+        <p class="text-sm text-gray-500">Вы посетили все {{ totalCount }} остановок</p>
       </div>
 
       <div v-if="nextWaypoint" class="flex gap-2">
@@ -67,13 +67,13 @@
           :disabled="marking"
           @click="markVisited"
         >
-          {{ marking ? '…' : 'Mark as arrived' }}
+          {{ marking ? '…' : 'Я на месте' }}
         </button>
         <button
           class="rounded-xl border border-gray-200 px-4 py-4 text-sm font-medium text-gray-500 min-h-[56px]"
           @click="showEndConfirm = true"
         >
-          End early
+          Завершить досрочно
         </button>
       </div>
 
@@ -83,14 +83,14 @@
           :disabled="finishing"
           @click="finishRoute(true)"
         >
-          {{ finishing ? '…' : 'Save to profile' }}
+          {{ finishing ? '…' : 'Сохранить в профиль' }}
         </button>
         <button
           class="rounded-xl border border-gray-200 px-4 py-4 text-sm font-medium text-gray-500 min-h-[56px]"
           :disabled="finishing"
           @click="finishRoute(false)"
         >
-          Go home
+          На главную
         </button>
       </div>
 
@@ -99,7 +99,7 @@
         class="mt-2 w-full text-center text-sm text-blue-600 py-1"
         @click="selectedPOI = nextWaypoint!.poi"
       >
-        About this place
+        Об этом месте
       </button>
     </div>
 
@@ -107,11 +107,11 @@
     <Teleport to="body">
       <div v-if="showEndConfirm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
         <div class="w-full max-w-sm rounded-2xl bg-white p-6">
-          <h3 class="mb-2 text-lg font-bold">End walk?</h3>
-          <p class="mb-4 text-sm text-gray-500">The route will be discarded and you'll return home.</p>
+          <h3 class="mb-2 text-lg font-bold">Завершить прогулку?</h3>
+          <p class="mb-4 text-sm text-gray-500">Маршрут будет прерван, и вы вернётесь на главную.</p>
           <div class="flex gap-2">
-            <button class="flex-1 rounded-xl border py-3 text-sm font-medium text-gray-600" @click="showEndConfirm = false">Cancel</button>
-            <button class="flex-1 rounded-xl bg-red-500 py-3 text-sm font-semibold text-white" @click="abandonWalk">End walk</button>
+            <button class="flex-1 rounded-xl border py-3 text-sm font-medium text-gray-600" @click="showEndConfirm = false">Отмена</button>
+            <button class="flex-1 rounded-xl bg-red-500 py-3 text-sm font-semibold text-white" @click="abandonWalk">Завершить</button>
           </div>
         </div>
       </div>
@@ -162,8 +162,7 @@ onMounted(async () => {
 watch(nextWaypoint, centerOnNext)
 
 function centerOnNext() {
-  if (!nextWaypoint.value) return
-  mapRef.value?.panTo(nextWaypoint.value.poi.lat, nextWaypoint.value.poi.lon, 16)
+  mapRef.value?.focusActiveLeg()
 }
 
 async function markVisited() {

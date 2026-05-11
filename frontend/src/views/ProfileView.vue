@@ -7,7 +7,7 @@
           ←
         </button>
         <div>
-          <h1 class="text-lg font-bold text-gray-900">My routes</h1>
+          <h1 class="text-lg font-bold text-gray-900">Мои маршруты</h1>
           <p v-if="auth.user" class="text-xs text-gray-400">{{ auth.user.email }}</p>
         </div>
       </div>
@@ -23,9 +23,9 @@
       </div>
 
       <div v-else-if="store.routes.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
-        <p class="text-gray-400 text-sm">No saved routes yet.</p>
+        <p class="text-gray-400 text-sm">Нет сохранённых маршрутов.</p>
         <button class="mt-3 text-blue-600 text-sm font-medium" @click="$router.push('/')">
-          Generate your first route →
+          Создать первый маршрут →
         </button>
       </div>
 
@@ -39,9 +39,8 @@
           <div class="flex-1 min-w-0">
             <p class="font-semibold text-gray-900 truncate">{{ route.name }}</p>
             <p class="mt-0.5 text-sm text-gray-400">
-              {{ (route.total_distance_m / 1000).toFixed(1) }} km ·
-              {{ route.waypoints.length }} stops ·
-              {{ route.is_circular ? 'Circular' : 'One-way' }}
+              {{ (route.total_distance_m / 1000).toFixed(1) }} км ·
+              {{ route.waypoints.length }} остановок
             </p>
             <div class="mt-1.5 flex flex-wrap gap-1">
               <span
@@ -59,7 +58,7 @@
               class="rounded-full px-2.5 py-0.5 text-xs font-medium"
               :class="statusClass(route.status)"
             >
-              {{ route.status }}
+              {{ statusLabel(route.status) }}
             </span>
             <button
               class="flex h-8 w-8 items-center justify-center rounded-full text-red-400 hover:bg-red-50 min-h-[44px] min-w-[44px]"
@@ -76,11 +75,11 @@
     <Teleport to="body">
       <div v-if="deleteId" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
         <div class="w-full max-w-sm rounded-2xl bg-white p-6">
-          <h3 class="mb-2 text-lg font-bold">Delete route?</h3>
-          <p class="mb-4 text-sm text-gray-500">This cannot be undone.</p>
+          <h3 class="mb-2 text-lg font-bold">Удалить маршрут?</h3>
+          <p class="mb-4 text-sm text-gray-500">Это действие нельзя отменить.</p>
           <div class="flex gap-2">
-            <button class="flex-1 rounded-xl border py-3 text-sm font-medium" @click="deleteId = null">Cancel</button>
-            <button class="flex-1 rounded-xl bg-red-500 py-3 text-sm font-semibold text-white" @click="doDelete">Delete</button>
+            <button class="flex-1 rounded-xl border py-3 text-sm font-medium" @click="deleteId = null">Отмена</button>
+            <button class="flex-1 rounded-xl bg-red-500 py-3 text-sm font-semibold text-white" @click="doDelete">Удалить</button>
           </div>
         </div>
       </div>
@@ -136,7 +135,16 @@ function statusClass(status: RouteStatus) {
   }[status]
 }
 
+function statusLabel(status: RouteStatus) {
+  return {
+    draft: 'черновик',
+    active: 'активный',
+    completed: 'завершён',
+    abandoned: 'прерван',
+  }[status]
+}
+
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('ru-RU', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 </script>

@@ -105,10 +105,20 @@ export function useYandexMap(containerId: string, initialCenter: [number, number
     mapInstance.value?.setCenter([lat, lon], zoom)
   }
 
+  function fitToBounds(latLons: [number, number][]) {
+    if (!latLons.length || !mapInstance.value) return
+    const lats = latLons.map(c => c[0])
+    const lons = latLons.map(c => c[1])
+    mapInstance.value.setBounds(
+      [[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]],
+      { checkZoomRange: true, zoomMargin: 48 },
+    )
+  }
+
   function fitViewport() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(mapInstance.value as any)?.container?.fitToViewport()
   }
 
-  return { mapInstance, isReady, clearObjects, addPlacemark, drawRoute, drawSegmentedRoute, drawSegment, onMapClick, panTo, fitViewport }
+  return { mapInstance, isReady, clearObjects, addPlacemark, drawRoute, drawSegmentedRoute, drawSegment, onMapClick, panTo, fitToBounds, fitViewport }
 }
