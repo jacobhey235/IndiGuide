@@ -50,7 +50,7 @@ export interface GenerateRouteRequest {
   start_lon: number
   distance_m: number
   num_pois: number
-  selected_categories: string[]
+  selected_categories?: string[]
   name?: string
 }
 

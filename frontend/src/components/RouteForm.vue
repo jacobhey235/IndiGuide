@@ -47,7 +47,27 @@
         <label class="mb-2 block text-sm font-medium text-gray-700">
           Что вас интересует
         </label>
-        <div class="flex flex-wrap gap-2">
+
+        <div class="mb-3 flex overflow-hidden rounded-lg border border-gray-200 text-xs font-medium">
+          <button
+            type="button"
+            class="flex-1 py-2 transition-colors"
+            :class="usePrefs ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'"
+            @click="usePrefs = true"
+          >По предпочтениям</button>
+          <button
+            type="button"
+            class="flex-1 border-l border-gray-200 py-2 transition-colors"
+            :class="!usePrefs ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'"
+            @click="usePrefs = false"
+          >Выбрать вручную</button>
+        </div>
+
+        <p v-if="usePrefs" class="text-xs text-gray-500">
+          Маршрут подберётся по вашим интересам автоматически
+        </p>
+
+        <div v-else class="flex flex-wrap gap-2">
           <button
             v-for="c in CATEGORIES"
             :key="c.key"
@@ -62,13 +82,13 @@
             <span>{{ c.label }}</span>
           </button>
         </div>
-        <p v-if="selected.size === 0" class="mt-2 text-xs text-gray-400">
+        <p v-if="!usePrefs && selected.size === 0" class="mt-2 text-xs text-gray-400">
           Выберите хотя бы одну категорию
         </p>
       </div>
 
       <button
-        :disabled="!selectedLat || loading || selected.size === 0"
+        :disabled="!selectedLat || loading || (!usePrefs && selected.size === 0)"
         class="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 min-h-[48px]"
         @click="submit"
       >
@@ -96,10 +116,11 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  generate: [req: { distance_m: number; num_pois: number; selected_categories: string[] }]
+  generate: [req: { distance_m: number; num_pois: number; selected_categories?: string[] }]
 }>()
 
 const form = reactive({ distance_m: 3000, num_pois: 4 })
+const usePrefs = ref(true)
 const selected = ref<Set<string>>(new Set(['historic', 'architecture']))
 
 function toggle(key: string) {
@@ -110,11 +131,12 @@ function toggle(key: string) {
 }
 
 function submit() {
-  if (!props.selectedLat || selected.value.size === 0) return
+  if (!props.selectedLat) return
+  if (!usePrefs.value && selected.value.size === 0) return
   emit('generate', {
     distance_m: form.distance_m,
     num_pois: form.num_pois,
-    selected_categories: Array.from(selected.value),
+    ...(usePrefs.value ? {} : { selected_categories: Array.from(selected.value) }),
   })
 }
 </script>

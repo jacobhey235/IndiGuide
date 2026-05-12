@@ -58,7 +58,7 @@ class RouteGenerateRequest(BaseModel):
     start_lon: float
     distance_m: float = Field(ge=500, le=20_000)
     num_pois: int = Field(ge=2, le=15)
-    selected_categories: list[str] = Field(min_length=1, max_length=7)
+    selected_categories: list[str] | None = Field(default=None, max_length=7)
     name: str | None = None
 
 

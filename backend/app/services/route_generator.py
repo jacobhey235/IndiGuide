@@ -13,6 +13,7 @@ from app.models.user import User
 from app.services.opentripmap import OTMPlace, OpenTripMapClient
 from app.services.osrm import OSRMClient
 from app.services.preferences import get_preference_map
+from app.services.route_categories import auto_select as auto_select_categories
 from app.services.route_categories import expand as expand_categories
 
 _MIN_DIST_M = 400   # minimum spacing between selected POIs
@@ -149,9 +150,14 @@ async def generate_route(
     start_lon: float,
     distance_m: float,
     num_pois: int,
-    selected_categories: list[str],
+    selected_categories: list[str] | None,
     name: str | None,
 ) -> Route:
+    user_prefs = await get_preference_map(db, user.id)
+
+    if not selected_categories:
+        selected_categories = auto_select_categories(user_prefs)
+
     otm_kinds = expand_categories(selected_categories)
     if not otm_kinds:
         raise ValueError("Не выбрано ни одной допустимой категории.")
@@ -175,7 +181,6 @@ async def generate_route(
     if not candidates:
         raise ValueError("В этом районе не найдено достопримечательностей. Попробуйте увеличить расстояние.")
 
-    user_prefs = await get_preference_map(db, user.id)
     scored = [(p, _score(p, selected_kinds, user_prefs)) for p in candidates]
     scored = [(p, s) for p, s in scored if s >= _MIN_SCORE]
 

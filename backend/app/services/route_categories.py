@@ -28,3 +28,18 @@ def expand(selected_keys: list[str]) -> list[str]:
         out.extend(CATEGORIES.get(key, []))
     seen: set[str] = set()
     return [k for k in out if not (k in seen or seen.add(k))]
+
+
+def auto_select(user_prefs: dict[str, float]) -> list[str]:
+    """Pick category keys based on user preference scores (threshold ≥ 0.5).
+
+    Falls back to all categories when the user has no stored preferences yet,
+    or when nothing clears the threshold (pathological case).
+    """
+    if not user_prefs:
+        return list(CATEGORIES.keys())
+    selected = [
+        key for key, kinds in CATEGORIES.items()
+        if sum(user_prefs.get(k, 0.5) for k in kinds) / len(kinds) >= 0.5
+    ]
+    return selected if selected else list(CATEGORIES.keys())
