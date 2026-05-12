@@ -69,6 +69,10 @@ class RouteUpdateRequest(BaseModel):
     is_saved: bool | None = None
 
 
+class RateWaypointRequest(BaseModel):
+    rating: int = Field(ge=1, le=5)
+
+
 class NavigationResponse(BaseModel):
     geometry: dict      # GeoJSON LineString of the walking route
     distance_m: float

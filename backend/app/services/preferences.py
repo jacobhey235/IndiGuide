@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.poi import POI
 from app.models.preferences import POIInteraction, UserPreference
 
-_ALPHA_PASSIVE = 0.15  # EMA smoothing for visited / removed signals
+_ALPHA_PASSIVE = 0.15  # EMA smoothing for passive visit / removal signals
+_ALPHA_ACTIVE = 0.35   # stronger EMA for explicit user ratings
 
 
 async def get_preference_map(db: AsyncSession, user_id: uuid.UUID) -> dict[str, float]:
@@ -49,8 +50,26 @@ async def update_on_removal(
     await db.commit()
 
 
+async def update_on_rating(
+    db: AsyncSession, user_id: uuid.UUID, poi: POI, rating: int, route_id: uuid.UUID | None = None
+) -> None:
+    # Normalise 1-5 → 0.0-1.0, then apply a stronger EMA step
+    target = (rating - 1) / 4.0
+    await _apply_ema(db, user_id, poi, target=target, alpha=_ALPHA_ACTIVE)
+    db.add(
+        POIInteraction(
+            user_id=user_id,
+            poi_xid=poi.xid,
+            route_id=route_id,
+            interaction_type="rated",
+            rating=rating,
+        )
+    )
+    await db.commit()
+
+
 async def _apply_ema(
-    db: AsyncSession, user_id: uuid.UUID, poi: POI, target: float
+    db: AsyncSession, user_id: uuid.UUID, poi: POI, target: float, alpha: float = _ALPHA_PASSIVE
 ) -> None:
     kinds = [k.strip() for k in poi.kinds.split(",") if k.strip()]
     for kind in kinds:
@@ -58,6 +77,6 @@ async def _apply_ema(
         if pref is None:
             pref = UserPreference(user_id=user_id, poi_kind=kind, score=0.5, interactions=0)
             db.add(pref)
-        pref.score = pref.score * (1 - _ALPHA_PASSIVE) + _ALPHA_PASSIVE * target
+        pref.score = pref.score * (1 - alpha) + alpha * target
         pref.interactions += 1
         pref.last_updated_at = datetime.now(timezone.utc)

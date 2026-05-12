@@ -313,9 +313,15 @@ async function startWalk() {
 async function removeWaypoint(poiXid: string) {
   if (!generatedRoute.value) return
   try {
-    generatedRoute.value = await routesStore.updateRoute(generatedRoute.value.id, {
+    const updated = await routesStore.updateRoute(generatedRoute.value.id, {
       remove_poi_xids: [poiXid],
     })
+    if (updated.waypoints.length === 0) {
+      generatedRoute.value = null
+      drawerOpen.value = true
+    } else {
+      generatedRoute.value = updated
+    }
   } catch {
     errorMsg.value = 'Не удалось удалить объект'
     setTimeout(() => { errorMsg.value = '' }, 3000)

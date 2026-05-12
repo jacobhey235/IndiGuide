@@ -105,13 +105,23 @@ export function useYandexMap(containerId: string, initialCenter: [number, number
     mapInstance.value?.setCenter([lat, lon], zoom)
   }
 
-  function fitToBounds(latLons: [number, number][]) {
+  function fitToBounds(latLons: [number, number][], bottomPadding = 0) {
     if (!latLons.length || !mapInstance.value) return
+
     const lats = latLons.map(c => c[0])
     const lons = latLons.map(c => c[1])
+    const maxLat = Math.max(...lats)
+    const minLat = Math.min(...lats)
+    const minLon = Math.min(...lons)
+    const maxLon = Math.max(...lons)
+
+    // Pass asymmetric zoomMargin so setBounds keeps the segment inside the visible
+    // area above the bottom card. The bottom margin = base + card height pushes the
+    // fitting rectangle up exactly to the card's top edge.
+    const base = 48
     mapInstance.value.setBounds(
-      [[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]],
-      { checkZoomRange: true, zoomMargin: 48 },
+      [[minLat, minLon], [maxLat, maxLon]],
+      { checkZoomRange: true, zoomMargin: bottomPadding > 0 ? [base, base, base + bottomPadding, base] : base },
     )
   }
 

@@ -65,6 +65,10 @@ export const useRoutesStore = defineStore('routes', () => {
     return data
   }
 
+  async function rateWaypoint(routeId: string, waypointId: number, rating: number): Promise<void> {
+    await client.post(`/routes/${routeId}/waypoints/${waypointId}/rate`, { rating })
+  }
+
   async function saveRoute(id: string): Promise<Route> {
     return updateRoute(id, { is_saved: true })
   }
@@ -87,6 +91,7 @@ export const useRoutesStore = defineStore('routes', () => {
     startRoute,
     endRoute,
     visitWaypoint,
+    rateWaypoint,
     fetchPOIDetail,
   }
 })

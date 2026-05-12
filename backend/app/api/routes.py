@@ -13,7 +13,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.route import Route, RouteStatus, RouteWaypoint
 from app.models.user import User
-from app.schemas.route import NavigationResponse, RouteGenerateRequest, RouteOut, RouteSummary, RouteUpdateRequest
+from app.schemas.route import NavigationResponse, RateWaypointRequest, RouteGenerateRequest, RouteOut, RouteSummary, RouteUpdateRequest
 from app.services import preferences as pref_svc
 from app.services.osrm import OSRMClient
 from app.services.route_generator import generate_route
@@ -241,3 +241,21 @@ async def visit_waypoint(
     await pref_svc.update_on_visit(db, user.id, wp.poi, route.id)
 
     return await _get_user_route(route_id, user, db)
+
+
+@router.post("/{route_id}/waypoints/{waypoint_id}/rate", status_code=204)
+async def rate_waypoint(
+    route_id: uuid.UUID,
+    waypoint_id: int,
+    body: RateWaypointRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    route = await _get_user_route(route_id, user, db)
+    wp = next((w for w in route.waypoints if w.id == waypoint_id), None)
+    if wp is None:
+        raise HTTPException(status_code=404, detail="Точка маршрута не найдена")
+    if not wp.is_visited:
+        raise HTTPException(status_code=400, detail="Нельзя оценить непосещённую точку")
+
+    await pref_svc.update_on_rating(db, user.id, wp.poi, body.rating, route.id)
