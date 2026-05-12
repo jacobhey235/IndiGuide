@@ -24,11 +24,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.api import auth, pois, routes  # noqa: E402
+from app.api import auth, pois, preferences, routes  # noqa: E402
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(routes.router, prefix="/api/routes", tags=["routes"])
 app.include_router(pois.router, prefix="/api/pois", tags=["pois"])
+app.include_router(preferences.router, prefix="/api/preferences", tags=["preferences"])
 
 
 @app.get("/api/health")

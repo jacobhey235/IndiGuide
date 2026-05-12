@@ -13,6 +13,11 @@
       </div>
     </div>
 
+    <!-- Preferences chart -->
+    <div class="px-4 pt-4">
+      <PreferencesChart :scores="prefScores" />
+    </div>
+
     <!-- Route list -->
     <div class="flex-1 overflow-y-auto px-4 py-4 space-y-3">
       <div v-if="loading" class="flex items-center justify-center py-12 text-gray-400">
@@ -92,14 +97,27 @@ import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRoutesStore } from '@/stores/routes'
 import type { Route, RouteStatus } from '@/types'
+import PreferencesChart from '@/components/PreferencesChart.vue'
+import client from '@/api/client'
 
 const auth = useAuthStore()
 const store = useRoutesStore()
 const loading = ref(true)
 const deleteId = ref<string | null>(null)
+const prefScores = ref<Record<string, number>>({})
 
 onMounted(async () => {
-  await store.fetchRoutes()
+  const [, prefsResult] = await Promise.allSettled([
+    store.fetchRoutes(),
+    client.get<{ category: string; score: number }[]>('/preferences/categories'),
+  ])
+  if (prefsResult.status === 'fulfilled') {
+    const map: Record<string, number> = {}
+    for (const item of prefsResult.value.data) {
+      map[item.category] = item.score
+    }
+    prefScores.value = map
+  }
   loading.value = false
 })
 
