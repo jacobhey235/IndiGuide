@@ -7,7 +7,7 @@ export function useYandexMap(containerId: string, initialCenter: [number, number
   // which breaks internal Yandex Maps event handling and degrades performance over time.
   const mapInstance = shallowRef<ymaps.Map | null>(null)
   const isReady = ref(false)
-  let _clickHandler: ((e: ymaps.MapEvent) => void) | null = null
+  let _clickHandler: ((e: ymaps.YMapsEvent) => void) | null = null
 
   onMounted(async () => {
     await ymaps.ready()

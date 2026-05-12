@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,14 +13,28 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.route import Route, RouteStatus, RouteWaypoint
 from app.models.user import User
-from app.schemas.route import NavigationResponse, RateWaypointRequest, RouteGenerateRequest, RouteOut, RouteSummary, RouteUpdateRequest
+from app.schemas.route import (
+    NavigationResponse,
+    PublicRouteOut,
+    PublicRouteSummary,
+    RateWaypointRequest,
+    RouteGenerateRequest,
+    RouteOut,
+    RouteSummary,
+    RouteUpdateRequest,
+)
 from app.services import preferences as pref_svc
 from app.services.osrm import OSRMClient
+from app.services.route_categories import CATEGORIES, expand
 from app.services.route_generator import generate_route
 
 router = APIRouter()
 
 _ROUTE_OPTIONS = selectinload(Route.waypoints).selectinload(RouteWaypoint.poi)
+_ROUTE_WITH_USER = [
+    selectinload(Route.waypoints).selectinload(RouteWaypoint.poi),
+    selectinload(Route.user),
+]
 
 
 async def _get_user_route(route_id: uuid.UUID, user: User, db: AsyncSession) -> Route:
@@ -32,6 +46,139 @@ async def _get_user_route(route_id: uuid.UUID, user: User, db: AsyncSession) -> 
         raise HTTPException(status_code=404, detail="Маршрут не найден")
     return route
 
+
+def _score_by_prefs(route: Route, pref_map: dict[str, float]) -> float:
+    kinds: list[str] = []
+    for wp in route.waypoints:
+        if wp.poi.kinds:
+            kinds.extend(k.strip() for k in wp.poi.kinds.split(",") if k.strip())
+    if not kinds:
+        return 0.5
+    return sum(pref_map.get(k, 0.5) for k in kinds) / len(kinds)
+
+
+def _score_by_categories(route: Route, selected_kinds: set[str]) -> int:
+    count = 0
+    for wp in route.waypoints:
+        if wp.poi.kinds:
+            for k in wp.poi.kinds.split(","):
+                if k.strip() in selected_kinds:
+                    count += 1
+    return count
+
+
+def _to_public_summary(route: Route) -> PublicRouteSummary:
+    base = RouteSummary.model_validate(route)
+    return PublicRouteSummary(
+        **{k: v for k, v in base.model_dump().items() if k in PublicRouteSummary.model_fields},
+        author_username=route.user.username,
+    )
+
+
+def _to_public_out(route: Route) -> PublicRouteOut:
+    base = RouteOut.model_validate(route)
+    return PublicRouteOut(
+        **{k: v for k, v in base.model_dump().items() if k in PublicRouteOut.model_fields},
+        author_username=route.user.username,
+    )
+
+
+# ── Explore endpoints (must come before /{route_id} to avoid path conflict) ──
+
+@router.get("/explore", response_model=list[PublicRouteSummary])
+async def list_explore_routes(
+    sort: str = Query(default="preferences", pattern="^(preferences|categories)$"),
+    categories: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Route)
+        .options(*_ROUTE_WITH_USER)
+        .where(Route.is_published == True)  # noqa: E712
+    )
+    routes = list(result.scalars().all())
+
+    if sort == "preferences":
+        pref_map = await pref_svc.get_preference_map(db, user.id)
+        routes.sort(key=lambda r: _score_by_prefs(r, pref_map), reverse=True)
+    else:
+        selected_keys = [k.strip() for k in (categories or "").split(",") if k.strip()]
+        if not selected_keys:
+            selected_keys = list(CATEGORIES.keys())
+        selected_kinds = set(expand(selected_keys))
+        routes = [r for r in routes if _score_by_categories(r, selected_kinds) > 0]
+        routes.sort(key=lambda r: _score_by_categories(r, selected_kinds), reverse=True)
+
+    return [_to_public_summary(r) for r in routes]
+
+
+@router.get("/explore/{route_id}", response_model=PublicRouteOut)
+async def get_explore_route(
+    route_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Route)
+        .options(*_ROUTE_WITH_USER)
+        .where(Route.id == route_id, Route.is_published == True)  # noqa: E712
+    )
+    route = result.scalar_one_or_none()
+    if route is None:
+        raise HTTPException(status_code=404, detail="Маршрут не найден")
+    return _to_public_out(route)
+
+
+@router.post("/explore/{route_id}/clone", response_model=RouteOut, status_code=201)
+async def clone_explore_route(
+    route_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Route)
+        .options(_ROUTE_OPTIONS)
+        .where(Route.id == route_id, Route.is_published == True)  # noqa: E712
+    )
+    source = result.scalar_one_or_none()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Маршрут не найден")
+
+    clone = Route(
+        user_id=user.id,
+        name=source.name,
+        status=RouteStatus.draft,
+        is_saved=False,
+        is_published=False,
+        start_lon=source.start_lon,
+        start_lat=source.start_lat,
+        total_distance_m=source.total_distance_m,
+        osrm_geometry=source.osrm_geometry,
+        leg_geometries=source.leg_geometries,
+    )
+    db.add(clone)
+    await db.flush()
+
+    for wp in sorted(source.waypoints, key=lambda w: w.order_index):
+        db.add(RouteWaypoint(
+            route_id=clone.id,
+            poi_xid=wp.poi_xid,
+            order_index=wp.order_index,
+            is_visited=False,
+            visited_at=None,
+            leg_duration_s=wp.leg_duration_s,
+        ))
+
+    await db.commit()
+
+    result = await db.execute(
+        select(Route).options(_ROUTE_OPTIONS).where(Route.id == clone.id)
+    )
+    return result.scalar_one()
+
+
+# ── User's own routes ─────────────────────────────────────────────────────────
 
 @router.post("/generate", response_model=RouteOut, status_code=201)
 async def generate(
@@ -101,6 +248,11 @@ async def update_route(
 
     if body.is_saved is not None:
         route.is_saved = body.is_saved
+
+    if body.is_published is not None:
+        if body.is_published and not route.is_saved:
+            raise HTTPException(status_code=422, detail="Нельзя опубликовать несохранённый маршрут")
+        route.is_published = body.is_published
 
     needs_reroute = False
 

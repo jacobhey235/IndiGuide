@@ -37,6 +37,7 @@ class Route(Base):
         Enum(RouteStatus), default=RouteStatus.draft, nullable=False
     )
     is_saved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     start_lon: Mapped[float] = mapped_column(Float, nullable=False)
     start_lat: Mapped[float] = mapped_column(Float, nullable=False)
     total_distance_m: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

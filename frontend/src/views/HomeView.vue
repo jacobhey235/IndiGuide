@@ -27,8 +27,35 @@
         </div>
       </div>
 
-      <!-- Post-generation: route summary + POI list -->
-      <div v-if="generatedRoute" class="flex flex-col flex-1 overflow-hidden">
+      <!-- Tab switcher -->
+      <div class="px-4 pt-3 pb-0 flex-shrink-0">
+        <div class="flex bg-gray-100 rounded-xl p-1">
+          <button
+            class="flex-1 py-2 text-sm font-medium rounded-lg transition-all"
+            :class="activeTab === 'explore' ? 'bg-white shadow text-gray-900' : 'text-gray-500'"
+            @click="activeTab = 'explore'"
+          >
+            Маршруты
+          </button>
+          <button
+            class="flex-1 py-2 text-sm font-medium rounded-lg transition-all"
+            :class="activeTab === 'create' ? 'bg-white shadow text-gray-900' : 'text-gray-500'"
+            @click="activeTab = 'create'"
+          >
+            Создать
+          </button>
+        </div>
+      </div>
+
+      <!-- Explore tab -->
+      <PublicRoutesFeed
+        v-if="activeTab === 'explore'"
+        class="flex-1 overflow-hidden"
+        @select="onExploreSelect"
+      />
+
+      <!-- Create tab: post-generation route summary -->
+      <div v-else-if="generatedRoute" class="flex flex-col flex-1 overflow-hidden">
         <div class="px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <p class="font-semibold text-gray-900">{{ generatedRoute.name }}</p>
           <p class="text-sm text-gray-500 mt-0.5">
@@ -96,7 +123,7 @@
         </div>
       </div>
 
-      <!-- Pre-generation: route form -->
+      <!-- Create tab: route form (pre-generation) -->
       <RouteForm
         v-else
         :selected-lat="startLat"
@@ -152,12 +179,40 @@
       >
         <div class="h-1.5 w-10 rounded-full bg-gray-300" />
         <span v-if="!drawerOpen" class="mt-1.5 text-sm font-semibold text-blue-600">
-          {{ generatedRoute ? 'Показать маршрут' : 'Создать маршрут' }}
+          {{ activeTab === 'explore' ? 'Маршруты' : generatedRoute ? 'Показать маршрут' : 'Создать маршрут' }}
         </span>
       </div>
 
-      <div v-if="drawerOpen">
-        <div v-if="generatedRoute" class="px-4 pb-4">
+      <div v-if="drawerOpen" class="flex flex-col" style="max-height: 70dvh;">
+        <!-- Mobile tab switcher -->
+        <div class="px-4 pb-2 flex-shrink-0">
+          <div class="flex bg-gray-100 rounded-xl p-1">
+            <button
+              class="flex-1 py-2 text-sm font-medium rounded-lg transition-all"
+              :class="activeTab === 'explore' ? 'bg-white shadow text-gray-900' : 'text-gray-500'"
+              @click="activeTab = 'explore'"
+            >
+              Маршруты
+            </button>
+            <button
+              class="flex-1 py-2 text-sm font-medium rounded-lg transition-all"
+              :class="activeTab === 'create' ? 'bg-white shadow text-gray-900' : 'text-gray-500'"
+              @click="activeTab = 'create'"
+            >
+              Создать
+            </button>
+          </div>
+        </div>
+
+        <!-- Explore tab (mobile) -->
+        <PublicRoutesFeed
+          v-if="activeTab === 'explore'"
+          class="flex-1 overflow-hidden min-h-0"
+          @select="onExploreSelect"
+        />
+
+        <!-- Create tab (mobile): post-generation -->
+        <div v-else-if="generatedRoute" class="px-4 pb-4">
           <div class="mb-3">
             <p class="font-semibold text-gray-900">{{ generatedRoute.name }}</p>
             <p class="text-sm text-gray-500">
@@ -187,11 +242,13 @@
           </button>
         </div>
 
+        <!-- Create tab (mobile): route form -->
         <RouteForm
           v-else
           :selected-lat="startLat"
           :selected-lon="startLon"
           :loading="routesStore.generating"
+          class="flex-1 overflow-y-auto"
           @generate="onGenerate"
         />
       </div>
@@ -217,6 +274,7 @@ import { useRouter } from 'vue-router'
 import AppMap from '@/components/AppMap.vue'
 import RouteForm from '@/components/RouteForm.vue'
 import AuthModal from '@/components/AuthModal.vue'
+import PublicRoutesFeed from '@/components/PublicRoutesFeed.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRoutesStore } from '@/stores/routes'
 import type { Route } from '@/types'
@@ -226,6 +284,7 @@ const auth = useAuthStore()
 const routesStore = useRoutesStore()
 const mapRef = ref<InstanceType<typeof AppMap> | null>(null)
 
+const activeTab = ref<'explore' | 'create'>('explore')
 const drawerOpen = ref(true)
 const showAuth = ref(false)
 const startLat = ref<number | null>(null)
@@ -283,9 +342,14 @@ function onPointSelected(lat: number, lon: number) {
   startLat.value = lat
   startLon.value = lon
   if (!drawerOpen.value) drawerOpen.value = true
+  activeTab.value = 'create'
 }
 
-async function onGenerate(req: { distance_m: number; num_pois: number; selected_categories: string[] }) {
+function onExploreSelect(id: string) {
+  router.push(`/explore/${id}`)
+}
+
+async function onGenerate(req: { distance_m: number; num_pois: number; selected_categories?: string[] }) {
   if (!auth.isAuthenticated()) { showAuth.value = true; return }
   if (!startLat.value || !startLon.value) return
 

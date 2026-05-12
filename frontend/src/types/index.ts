@@ -34,6 +34,7 @@ export interface Route {
   name: string
   status: RouteStatus
   is_saved: boolean
+  is_published: boolean
   start_lon: number
   start_lat: number
   total_distance_m: number
@@ -43,6 +44,22 @@ export interface Route {
   started_at?: string | null
   ended_at?: string | null
   waypoints: Waypoint[]
+}
+
+export interface PublicRoute {
+  id: string
+  name: string
+  status: RouteStatus
+  total_distance_m: number
+  start_lon: number
+  start_lat: number
+  osrm_geometry?: { type: 'LineString'; coordinates: [number, number][] } | null
+  leg_geometries?: Array<{ type: 'LineString'; coordinates: [number, number][] }> | null
+  created_at: string
+  started_at?: string | null
+  ended_at?: string | null
+  waypoints: Waypoint[]
+  author_username: string
 }
 
 export interface GenerateRouteRequest {
@@ -59,4 +76,5 @@ export interface RouteUpdateRequest {
   waypoint_order?: string[]
   remove_poi_xids?: string[]
   is_saved?: boolean
+  is_published?: boolean
 }

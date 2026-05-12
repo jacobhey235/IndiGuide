@@ -147,12 +147,30 @@
                   class="rounded-full px-2.5 py-0.5 text-xs font-medium"
                   :class="statusClass(route.status)"
                 >{{ statusLabel(route.status) }}</span>
-                <button
-                  class="flex h-8 w-8 items-center justify-center rounded-full text-red-400 hover:bg-red-50 min-h-[44px] min-w-[44px]"
-                  @click.stop="confirmDeleteRoute(route.id)"
-                >
-                  🗑
-                </button>
+                <div class="flex items-center gap-1">
+                  <button
+                    v-if="!route.is_published"
+                    class="rounded-full border border-green-200 px-2.5 py-1 text-xs font-medium text-green-600 hover:bg-green-50 transition-colors"
+                    :disabled="publishingId === route.id"
+                    @click.stop="togglePublish(route)"
+                  >
+                    {{ publishingId === route.id ? '…' : 'Опубликовать' }}
+                  </button>
+                  <button
+                    v-else
+                    class="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+                    :disabled="publishingId === route.id"
+                    @click.stop="togglePublish(route)"
+                  >
+                    {{ publishingId === route.id ? '…' : 'Опубликован' }}
+                  </button>
+                  <button
+                    class="flex h-8 w-8 items-center justify-center rounded-full text-red-400 hover:bg-red-50 min-h-[44px] min-w-[44px]"
+                    @click.stop="confirmDeleteRoute(route.id)"
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -210,8 +228,8 @@ const loading = ref(true)
 const prefScores = ref<Record<string, number>>({})
 
 const tabs = [
-  { id: 'account', icon: '👤', label: 'Аккаунт' },
-  { id: 'routes', icon: '🗺️', label: 'Маршруты' },
+  { id: 'account' as const, icon: '👤', label: 'Аккаунт' },
+  { id: 'routes' as const, icon: '🗺️', label: 'Маршруты' },
 ]
 const activeTab = ref<'account' | 'routes'>('account')
 
@@ -227,6 +245,7 @@ const showDeleteConfirm = ref(false)
 const deleteAccountLoading = ref(false)
 
 const deleteRouteId = ref<string | null>(null)
+const publishingId = ref<string | null>(null)
 
 onMounted(async () => {
   const [, prefsResult] = await Promise.allSettled([
@@ -278,6 +297,20 @@ async function doDeleteAccount() {
     showDeleteConfirm.value = false
   } finally {
     deleteAccountLoading.value = false
+  }
+}
+
+async function togglePublish(route: Route) {
+  publishingId.value = route.id
+  try {
+    if (route.is_published) {
+      await store.unpublishRoute(route.id)
+    } else {
+      await store.publishRoute(route.id)
+    }
+    await store.fetchRoutes()
+  } finally {
+    publishingId.value = null
   }
 }
 

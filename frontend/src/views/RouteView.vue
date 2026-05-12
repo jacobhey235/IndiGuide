@@ -69,6 +69,23 @@
             Сохранить
           </button>
           <button
+            v-if="route.is_saved && !route.is_published"
+            class="rounded-xl border border-green-200 px-4 py-3.5 text-sm font-medium text-green-600 min-h-[48px] disabled:opacity-40"
+            :disabled="publishing"
+            @click="togglePublish"
+          >
+            {{ publishing ? '…' : 'Опубликовать' }}
+          </button>
+          <button
+            v-if="route.is_saved && route.is_published"
+            class="rounded-xl border border-gray-200 px-4 py-3.5 text-sm font-medium text-gray-500 min-h-[48px] disabled:opacity-40"
+            :disabled="publishing"
+            @click="togglePublish"
+          >
+            {{ publishing ? '…' : 'Снять с публикации' }}
+          </button>
+          <button
+            v-if="!route.is_saved"
             class="rounded-xl border border-red-200 px-4 py-3.5 text-sm font-medium text-red-500 min-h-[48px]"
             @click="deleteAndBack"
           >
@@ -92,13 +109,30 @@
           >
             {{ saving ? '…' : 'Сохранить в профиль' }}
           </button>
-          <button
-            v-else
-            class="flex-1 rounded-xl bg-green-500 py-3.5 text-sm font-semibold text-white min-h-[48px]"
-            @click="$router.push('/profile')"
-          >
-            В профиле
-          </button>
+          <template v-else>
+            <button
+              class="flex-1 rounded-xl bg-green-500 py-3.5 text-sm font-semibold text-white min-h-[48px]"
+              @click="$router.push('/profile')"
+            >
+              В профиле
+            </button>
+            <button
+              v-if="!route.is_published"
+              class="rounded-xl border border-green-200 px-4 py-3.5 text-sm font-medium text-green-600 min-h-[48px] disabled:opacity-40"
+              :disabled="publishing"
+              @click="togglePublish"
+            >
+              {{ publishing ? '…' : 'Опубликовать' }}
+            </button>
+            <button
+              v-else
+              class="rounded-xl border border-gray-200 px-4 py-3.5 text-sm font-medium text-gray-500 min-h-[48px] disabled:opacity-40"
+              :disabled="publishing"
+              @click="togglePublish"
+            >
+              {{ publishing ? '…' : 'Снять' }}
+            </button>
+          </template>
           <button
             class="rounded-xl border border-gray-200 px-4 py-3.5 text-sm font-medium text-gray-500 min-h-[48px]"
             @click="$router.push('/')"
@@ -128,6 +162,7 @@ const store = useRoutesStore()
 
 const editMode = ref(false)
 const saving = ref(false)
+const publishing = ref(false)
 const selectedPOI = ref<POI | null>(null)
 
 const route = computed(() => store.currentRoute)
@@ -164,6 +199,20 @@ async function saveAndViewProfile() {
     router.push('/profile')
   } finally {
     saving.value = false
+  }
+}
+
+async function togglePublish() {
+  if (!route.value) return
+  publishing.value = true
+  try {
+    if (route.value.is_published) {
+      await store.unpublishRoute(route.value.id)
+    } else {
+      await store.publishRoute(route.value.id)
+    }
+  } finally {
+    publishing.value = false
   }
 }
 
