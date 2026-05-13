@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -22,6 +22,7 @@ from app.schemas.route import (
     RouteOut,
     RouteSummary,
     RouteUpdateRequest,
+    UserRouteSummary,
 )
 from app.services import preferences as pref_svc
 from app.services.osrm import OSRMClient
@@ -65,6 +66,12 @@ def _score_by_categories(route: Route, selected_kinds: set[str]) -> int:
                 if k.strip() in selected_kinds:
                     count += 1
     return count
+
+
+def _to_user_summary(route: Route) -> UserRouteSummary:
+    base = RouteSummary.model_validate(route)
+    author = route.original_author_username or route.user.username
+    return UserRouteSummary(**base.model_dump(), author_username=author)
 
 
 def _to_public_summary(route: Route) -> PublicRouteSummary:
@@ -138,7 +145,7 @@ async def clone_explore_route(
 ):
     result = await db.execute(
         select(Route)
-        .options(_ROUTE_OPTIONS)
+        .options(*_ROUTE_WITH_USER)
         .where(Route.id == route_id, Route.is_published == True)  # noqa: E712
     )
     source = result.scalar_one_or_none()
@@ -156,6 +163,7 @@ async def clone_explore_route(
         total_distance_m=source.total_distance_m,
         osrm_geometry=source.osrm_geometry,
         leg_geometries=source.leg_geometries,
+        original_author_username=source.user.username,
     )
     db.add(clone)
     await db.flush()
@@ -210,18 +218,18 @@ async def generate(
     return result.scalar_one()
 
 
-@router.get("/", response_model=list[RouteSummary])
+@router.get("/", response_model=list[UserRouteSummary])
 async def list_routes(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     result = await db.execute(
         select(Route)
-        .options(_ROUTE_OPTIONS)
+        .options(*_ROUTE_WITH_USER)
         .where(Route.user_id == user.id, Route.is_saved == True)  # noqa: E712
         .order_by(Route.created_at.desc())
     )
-    return result.scalars().all()
+    return [_to_user_summary(r) for r in result.scalars().all()]
 
 
 @router.get("/{route_id}", response_model=RouteOut)
@@ -263,6 +271,10 @@ async def update_route(
                 await pref_svc.update_on_removal(db, user.id, wp.poi, route.id)
             route.waypoints.remove(wp)
             await db.delete(wp)
+        if len(route.waypoints) < 2:
+            await db.delete(route)
+            await db.commit()
+            return Response(status_code=204)
         for i, wp in enumerate(sorted(route.waypoints, key=lambda w: w.order_index)):
             wp.order_index = i
         needs_reroute = True

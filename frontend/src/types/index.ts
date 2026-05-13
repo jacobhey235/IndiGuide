@@ -44,6 +44,7 @@ export interface Route {
   started_at?: string | null
   ended_at?: string | null
   waypoints: Waypoint[]
+  author_username?: string
 }
 
 export interface PublicRoute {

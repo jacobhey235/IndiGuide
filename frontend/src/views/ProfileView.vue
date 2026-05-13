@@ -129,6 +129,9 @@
             <div class="flex items-start justify-between gap-2">
               <div class="flex-1 min-w-0">
                 <p class="font-semibold text-gray-900 truncate">{{ route.name }}</p>
+                <p class="mt-0.5 text-xs text-blue-500">
+                  {{ route.author_username === auth.user?.username ? 'Вы' : route.author_username }}
+                </p>
                 <p class="mt-0.5 text-sm text-gray-400">
                   {{ (route.total_distance_m / 1000).toFixed(1) }} км ·
                   {{ route.waypoints.length }} остановок
@@ -184,8 +187,9 @@
         <div class="w-full max-w-sm rounded-2xl bg-white p-6">
           <h3 class="mb-2 text-lg font-bold">Удалить маршрут?</h3>
           <p class="mb-4 text-sm text-gray-500">Это действие нельзя отменить.</p>
+          <p v-if="deleteRouteError" class="mb-3 text-sm text-red-500">{{ deleteRouteError }}</p>
           <div class="flex gap-2">
-            <button class="flex-1 rounded-xl border py-3 text-sm font-medium" @click="deleteRouteId = null">Отмена</button>
+            <button class="flex-1 rounded-xl border py-3 text-sm font-medium" @click="deleteRouteId = null; deleteRouteError = ''">Отмена</button>
             <button class="flex-1 rounded-xl bg-red-500 py-3 text-sm font-semibold text-white" @click="doDeleteRoute">Удалить</button>
           </div>
         </div>
@@ -245,6 +249,7 @@ const showDeleteConfirm = ref(false)
 const deleteAccountLoading = ref(false)
 
 const deleteRouteId = ref<string | null>(null)
+const deleteRouteError = ref('')
 const publishingId = ref<string | null>(null)
 
 onMounted(async () => {
@@ -320,8 +325,13 @@ function confirmDeleteRoute(id: string) {
 
 async function doDeleteRoute() {
   if (!deleteRouteId.value) return
-  await store.deleteRoute(deleteRouteId.value)
-  deleteRouteId.value = null
+  deleteRouteError.value = ''
+  try {
+    await store.deleteRoute(deleteRouteId.value)
+    deleteRouteId.value = null
+  } catch {
+    deleteRouteError.value = 'Не удалось удалить маршрут. Попробуйте ещё раз.'
+  }
 }
 
 function topKinds(route: Route): string[] {

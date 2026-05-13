@@ -39,7 +39,7 @@ class POIInteraction(Base):
     )
     poi_xid: Mapped[str] = mapped_column(ForeignKey("pois.xid"), nullable=False)
     route_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("routes.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("routes.id", ondelete="SET NULL"), nullable=True
     )
     interaction_type: Mapped[str] = mapped_column(String, nullable=False)
     rating: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -31,12 +31,17 @@ export const useRoutesStore = defineStore('routes', () => {
     return data
   }
 
-  async function updateRoute(id: string, updates: RouteUpdateRequest): Promise<Route> {
-    const { data } = await client.put<Route>(`/routes/${id}`, updates)
-    currentRoute.value = data
+  async function updateRoute(id: string, updates: RouteUpdateRequest): Promise<Route | null> {
+    const response = await client.put<Route>(`/routes/${id}`, updates)
+    if (response.status === 204) {
+      routes.value = routes.value.filter((r) => r.id !== id)
+      if (currentRoute.value?.id === id) currentRoute.value = null
+      return null
+    }
+    currentRoute.value = response.data
     const idx = routes.value.findIndex((r) => r.id === id)
-    if (idx !== -1) routes.value[idx] = data
-    return data
+    if (idx !== -1) routes.value[idx] = response.data
+    return response.data
   }
 
   async function deleteRoute(id: string) {
@@ -69,15 +74,15 @@ export const useRoutesStore = defineStore('routes', () => {
     await client.post(`/routes/${routeId}/waypoints/${waypointId}/rate`, { rating })
   }
 
-  async function saveRoute(id: string): Promise<Route> {
+  async function saveRoute(id: string): Promise<Route | null> {
     return updateRoute(id, { is_saved: true })
   }
 
-  async function publishRoute(id: string): Promise<Route> {
+  async function publishRoute(id: string): Promise<Route | null> {
     return updateRoute(id, { is_published: true })
   }
 
-  async function unpublishRoute(id: string): Promise<Route> {
+  async function unpublishRoute(id: string): Promise<Route | null> {
     return updateRoute(id, { is_published: false })
   }
 

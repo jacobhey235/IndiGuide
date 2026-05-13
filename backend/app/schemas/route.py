@@ -55,6 +55,10 @@ class RouteSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserRouteSummary(RouteSummary):
+    author_username: str
+
+
 class PublicRouteSummary(BaseModel):
     id: uuid.UUID
     name: str

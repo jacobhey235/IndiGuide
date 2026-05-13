@@ -48,6 +48,7 @@ class Route(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    original_author_username: Mapped[str | None] = mapped_column(String, nullable=True)
 
     user: Mapped[User] = relationship(back_populates="routes")
     waypoints: Mapped[list[RouteWaypoint]] = relationship(

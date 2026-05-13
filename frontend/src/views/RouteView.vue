@@ -234,6 +234,7 @@ async function moveWaypoint(index: number, direction: 'up' | 'down') {
 
 async function removeWaypoint(xid: string) {
   if (!route.value) return
-  await store.updateRoute(route.value.id, { remove_poi_xids: [xid] })
+  const result = await store.updateRoute(route.value.id, { remove_poi_xids: [xid] })
+  if (result === null) router.push('/')
 }
 </script>
