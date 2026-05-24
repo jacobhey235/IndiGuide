@@ -380,7 +380,7 @@ async function removeWaypoint(poiXid: string) {
     const updated = await routesStore.updateRoute(generatedRoute.value.id, {
       remove_poi_xids: [poiXid],
     })
-    if (updated.waypoints.length === 0) {
+    if (!updated || updated.waypoints.length === 0) {
       generatedRoute.value = null
       drawerOpen.value = true
     } else {
