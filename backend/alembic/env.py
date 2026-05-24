@@ -12,7 +12,11 @@ from app.core.config import settings  # noqa: E402
 import app.models  # noqa: E402, F401 — registers all models on Base.metadata
 from app.core.database import Base  # noqa: E402
 
-sync_url = settings.DATABASE_URL.replace("+asyncpg", "+psycopg2")
+_url = settings.DATABASE_URL
+if _url.startswith("postgres://"):
+    _url = _url.replace("postgres://", "postgresql://", 1)
+_url = _url.replace("+asyncpg", "")
+sync_url = _url
 config.set_main_option("sqlalchemy.url", sync_url)
 
 target_metadata = Base.metadata
