@@ -20,6 +20,9 @@ _ROAD_FACTOR = 1.4      # walking distance ≈ straight-line × this in cities
 _MIN_SCORE = 0.15       # drop very weak candidates
 _STEP_SEARCH_FACTOR = 1.5   # initial search window = step_radius × this (widened on fallback)
 _MAX_TURN_DEG = 120.0   # max turning angle at each waypoint; prevents backtracking/segment overlap
+_OVERLAP_THRESHOLD_M = 25.0  # paths within this distance share the same road corridor
+_MAX_OVERLAP_RATIO = 0.10    # max fraction of a new segment allowed to overlap existing ones
+_OVERLAP_SAMPLE_M = 40.0     # sampling step for overlap detection
 
 
 def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -37,6 +40,56 @@ def _bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     x = math.sin(d_lon) * math.cos(lat2r)
     y = math.cos(lat1r) * math.sin(lat2r) - math.sin(lat1r) * math.cos(lat2r) * math.cos(d_lon)
     return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+
+def _pt_to_seg_dist_m(
+    plat: float, plon: float,
+    alat: float, alon: float,
+    blat: float, blon: float,
+) -> float:
+    """Approximate distance in metres from point P to segment AB (flat-earth)."""
+    cos_lat = math.cos(math.radians((alat + blat + plat) / 3))
+    M = 111_000.0
+    px, py = plon * cos_lat * M, plat * M
+    ax, ay = alon * cos_lat * M, alat * M
+    bx, by = blon * cos_lat * M, blat * M
+    dx, dy = bx - ax, by - ay
+    seg_sq = dx * dx + dy * dy
+    if seg_sq < 1e-6:
+        return math.hypot(px - ax, py - ay)
+    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg_sq))
+    return math.hypot(px - ax - t * dx, py - ay - t * dy)
+
+
+def _overlap_ok(
+    from_lat: float, from_lon: float,
+    to_lat: float, to_lon: float,
+    route_points: list[tuple[float, float]],
+) -> bool:
+    """True if the proposed segment does not significantly overlap existing route segments.
+
+    Samples points along the new segment (skipping the shared junction at t=0)
+    and checks each against every already-walked segment. Returns False when
+    more than _MAX_OVERLAP_RATIO of the new segment lies within
+    _OVERLAP_THRESHOLD_M of a previously walked path.
+    """
+    if len(route_points) < 2:
+        return True
+    seg_dist = haversine(from_lat, from_lon, to_lat, to_lon)
+    if seg_dist < _OVERLAP_SAMPLE_M:
+        return True
+    n = max(3, int(seg_dist / _OVERLAP_SAMPLE_M))
+    segs = list(zip(route_points[:-1], route_points[1:]))
+    close = 0
+    for i in range(1, n):  # start at 1 to skip the shared junction point
+        t = i / (n - 1)
+        slat = from_lat + t * (to_lat - from_lat)
+        slon = from_lon + t * (to_lon - from_lon)
+        for (alat, alon), (blat, blon) in segs:
+            if _pt_to_seg_dist_m(slat, slon, alat, alon, blat, blon) <= _OVERLAP_THRESHOLD_M:
+                close += 1
+                break
+    return (close / (n - 1)) <= _MAX_OVERLAP_RATIO
 
 
 def _score(poi: OTMPlace, selected_kinds: set[str], user_prefs: dict[str, float]) -> float:
@@ -61,12 +114,14 @@ def _select_by_steps(
     step_radius * _STEP_SEARCH_FACTOR subject to:
       - min_dist: POIs must be spaced ≥ step_radius*0.5 (floor 150 m) apart
       - turn angle: turning angle at each waypoint must be ≤ _MAX_TURN_DEG,
-        which prevents backtracking and re-use of the same street segments
+        which prevents backtracking
+      - overlap: new straight-line segment must not heavily coincide with
+        previously walked segments (prevents re-using the same road corridors)
 
     Falls back through four progressively relaxed phases to guarantee num_pois:
-      1. radius + turn + min_dist
-      2. no radius  + turn + min_dist
-      3. no radius  + no turn + min_dist
+      1. radius + turn + min_dist + overlap
+      2. no radius  + turn + min_dist + overlap
+      3. no radius  + no turn + min_dist  (overlap dropped with turn)
       4. no constraints at all
     """
     min_dist = max(step_radius * 0.5, 150.0)
@@ -75,6 +130,7 @@ def _select_by_steps(
     has_direction = False  # no incoming bearing on the first step
     selected: list[OTMPlace] = []
     remaining = list(scored)
+    route_points: list[tuple[float, float]] = [(start_lat, start_lon)]
 
     for _ in range(num_pois):
         if not remaining:
@@ -91,30 +147,34 @@ def _select_by_steps(
         def _dist_ok(poi: OTMPlace) -> bool:
             return all(haversine(poi.lat, poi.lon, s.lat, s.lon) >= min_dist for s in selected)
 
+        def _no_overlap(plat: float, plon: float) -> bool:
+            return _overlap_ok(current_lat, current_lon, plat, plon, route_points)
+
         best: tuple[OTMPlace, float] | None = None
 
-        # Phase 1: radius + turn + min_dist
+        # Phase 1: radius + turn + min_dist + overlap
         for mult in (1.0, 1.8, 3.5):
             search_r = step_radius * _STEP_SEARCH_FACTOR * mult
             candidates = [
                 (poi, sc) for poi, sc in remaining
                 if (haversine(current_lat, current_lon, poi.lat, poi.lon) <= search_r
-                    and _dist_ok(poi) and _turn_ok(poi.lat, poi.lon))
+                    and _dist_ok(poi) and _turn_ok(poi.lat, poi.lon)
+                    and _no_overlap(poi.lat, poi.lon))
             ]
             if candidates:
                 best = max(candidates, key=lambda x: x[1])
                 break
 
-        # Phase 2: drop radius, keep turn + min_dist
+        # Phase 2: drop radius, keep turn + min_dist + overlap
         if best is None:
             candidates = [
                 (poi, sc) for poi, sc in remaining
-                if _dist_ok(poi) and _turn_ok(poi.lat, poi.lon)
+                if _dist_ok(poi) and _turn_ok(poi.lat, poi.lon) and _no_overlap(poi.lat, poi.lon)
             ]
             if candidates:
                 best = max(candidates, key=lambda x: x[1])
 
-        # Phase 3: drop turn constraint, keep min_dist
+        # Phase 3: drop turn + overlap constraints, keep min_dist
         if best is None:
             candidates = [
                 (poi, sc) for poi, sc in remaining if _dist_ok(poi)
@@ -134,6 +194,7 @@ def _select_by_steps(
         current_lat, current_lon = best_poi.lat, best_poi.lon
         has_direction = True
         selected.append(best_poi)
+        route_points.append((best_poi.lat, best_poi.lon))
         remaining = [(p, sc) for p, sc in remaining if p.xid != best_poi.xid]
 
     return selected
