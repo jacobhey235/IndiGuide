@@ -1,8 +1,11 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 
@@ -35,3 +38,16 @@ app.include_router(preferences.router, prefix="/api/preferences", tags=["prefere
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+_STATIC = Path(__file__).parent.parent / "static"
+
+if _STATIC.exists():
+    app.mount("/assets", StaticFiles(directory=_STATIC / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        candidate = _STATIC / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_STATIC / "index.html")
