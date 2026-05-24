@@ -306,30 +306,87 @@ const sortedWaypoints = computed(() => {
 // ── Drag-to-collapse (mobile) ──────────────────────────────────────────────
 let dragStartY = 0
 let dragging = false
+let lastTouchY = 0
+let lastTouchTime = 0
+let swipeVelocity = 0 // px/ms, positive = downward
 
-const drawerStyle = computed(() => ({
-  transition: 'transform 0.3s ease-out',
-  transform: drawerOpen.value ? 'translateY(0)' : 'translateY(calc(100% - 4rem))',
-}))
+const isDraggingActive = ref(false)
+const dragCurrentDelta = ref(0)
+
+const drawerStyle = computed(() => {
+  if (isDraggingActive.value && drawerOpen.value) {
+    return {
+      transition: 'none',
+      transform: `translateY(${Math.max(0, dragCurrentDelta.value)}px)`,
+    }
+  }
+  return {
+    transition: 'transform 0.3s ease-out',
+    transform: drawerOpen.value ? 'translateY(0)' : 'translateY(calc(100% - 4rem))',
+  }
+})
 
 function onHandleClick() {
   if (dragging) return
   drawerOpen.value = !drawerOpen.value
 }
 
-function onDragStart(e: MouseEvent) { dragging = false; dragStartY = e.clientY }
-function onTouchStart(e: TouchEvent) { dragging = false; dragStartY = e.touches[0].clientY }
+function onDragStart(e: MouseEvent) {
+  dragging = false
+  dragStartY = e.clientY
+}
+
+function onTouchStart(e: TouchEvent) {
+  dragging = false
+  dragStartY = e.touches[0].clientY
+  lastTouchY = dragStartY
+  lastTouchTime = Date.now()
+  swipeVelocity = 0
+}
 
 function onDragMove(e: MouseEvent) {
-  if (!dragStartY) return
-  if (e.clientY - dragStartY > 60) { drawerOpen.value = false; dragging = true; dragStartY = 0 }
+  if (!dragStartY || !drawerOpen.value) return
+  const delta = e.clientY - dragStartY
+  if (delta > 5) {
+    isDraggingActive.value = true
+    dragCurrentDelta.value = delta
+  }
 }
+
 function onTouchMove(e: TouchEvent) {
-  if (!dragStartY) return
-  if (e.touches[0].clientY - dragStartY > 60) { drawerOpen.value = false; dragging = true; dragStartY = 0 }
+  if (!dragStartY || !drawerOpen.value) return
+  const currentY = e.touches[0].clientY
+  const now = Date.now()
+
+  if (now > lastTouchTime) {
+    swipeVelocity = (currentY - lastTouchY) / (now - lastTouchTime)
+  }
+  lastTouchY = currentY
+  lastTouchTime = now
+
+  const delta = currentY - dragStartY
+  if (delta > 0) {
+    isDraggingActive.value = true
+    dragCurrentDelta.value = delta
+  }
 }
+
 function onDragEnd() {
+  const delta = dragCurrentDelta.value
+  const shouldClose = drawerOpen.value && (delta > 80 || swipeVelocity > 0.3)
+
+  isDraggingActive.value = false
+  dragCurrentDelta.value = 0
+
+  if (shouldClose) {
+    drawerOpen.value = false
+    dragging = true
+  }
+
   dragStartY = 0
+  lastTouchY = 0
+  lastTouchTime = 0
+  swipeVelocity = 0
   setTimeout(() => { dragging = false }, 50)
 }
 
