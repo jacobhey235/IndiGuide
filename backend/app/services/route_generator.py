@@ -16,9 +16,10 @@ from app.services.preferences import get_preference_map
 from app.services.route_categories import auto_select as auto_select_categories
 from app.services.route_categories import expand as expand_categories
 
-_MIN_DIST_M = 400   # minimum spacing between selected POIs
-_ROAD_FACTOR = 1.4  # walking distance ≈ straight-line × this in cities
-_MIN_SCORE = 0.15   # drop very weak candidates
+_ROAD_FACTOR = 1.4      # walking distance ≈ straight-line × this in cities
+_MIN_SCORE = 0.15       # drop very weak candidates
+_STEP_SEARCH_FACTOR = 1.5   # initial search window = step_radius × this (widened on fallback)
+_MAX_TURN_DEG = 120.0   # max turning angle at each waypoint; prevents backtracking/segment overlap
 
 
 def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -30,6 +31,14 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * R * math.asin(math.sqrt(a))
 
 
+def _bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    lat1r, lat2r = math.radians(lat1), math.radians(lat2)
+    d_lon = math.radians(lon2 - lon1)
+    x = math.sin(d_lon) * math.cos(lat2r)
+    y = math.cos(lat1r) * math.sin(lat2r) - math.sin(lat1r) * math.cos(lat2r) * math.cos(d_lon)
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+
 def _score(poi: OTMPlace, selected_kinds: set[str], user_prefs: dict[str, float]) -> float:
     kinds = [k.strip() for k in poi.kinds.split(",") if k.strip()]
     explicit = 1.0 if any(k in selected_kinds for k in kinds) else 0.0
@@ -38,81 +47,96 @@ def _score(poi: OTMPlace, selected_kinds: set[str], user_prefs: dict[str, float]
     return 0.5 * explicit + 0.3 * rating + 0.2 * implicit
 
 
-def _decluster(candidates: list[tuple[OTMPlace, float]]) -> list[tuple[OTMPlace, float]]:
-    """Greedy decluster by descending score: keep POIs spaced ≥ _MIN_DIST_M apart."""
-    by_score = sorted(candidates, key=lambda x: x[1], reverse=True)
-    kept: list[tuple[OTMPlace, float]] = []
-    for poi, sc in by_score:
-        if not any(haversine(poi.lat, poi.lon, k.lat, k.lon) < _MIN_DIST_M for k, _ in kept):
-            kept.append((poi, sc))
-    return kept
-
-
-def _bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Bearing in degrees [0, 360) from point 1 to point 2."""
-    lat1, lat2 = math.radians(lat1), math.radians(lat2)
-    d_lon = math.radians(lon2 - lon1)
-    x = math.sin(d_lon) * math.cos(lat2)
-    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(d_lon)
-    return (math.degrees(math.atan2(x, y)) + 360) % 360
-
-
-def _corridor_filter(
-    start_lat: float, start_lon: float, pool: list[tuple[OTMPlace, float]]
-) -> list[tuple[OTMPlace, float]]:
+def _select_by_steps(
+    scored: list[tuple[OTMPlace, float]],
+    start_lat: float,
+    start_lon: float,
+    num_pois: int,
+    step_radius: float,
+) -> list[OTMPlace]:
     """
-    Keep POIs within a narrow corridor from the start.
+    Iterative greedy selection based on desired step distance between POIs.
 
-    The spine direction is seeded by the weighted circular mean bearing of all
-    candidates, then adapts gradually as POIs are accepted nearest-first.
-    That slow drift is what lets the corridor curve slightly over distance.
+    From the current position, picks the best-scored POI within
+    step_radius * _STEP_SEARCH_FACTOR subject to:
+      - min_dist: POIs must be spaced ≥ step_radius*0.5 (floor 150 m) apart
+      - turn angle: turning angle at each waypoint must be ≤ _MAX_TURN_DEG,
+        which prevents backtracking and re-use of the same street segments
+
+    Falls back through four progressively relaxed phases to guarantee num_pois:
+      1. radius + turn + min_dist
+      2. no radius  + turn + min_dist
+      3. no radius  + no turn + min_dist
+      4. no constraints at all
     """
-    if len(pool) <= 1:
-        return pool
+    min_dist = max(step_radius * 0.5, 150.0)
+    current_lat, current_lon = start_lat, start_lon
+    prev_lat, prev_lon = start_lat, start_lon  # position before current (for turn calc)
+    has_direction = False  # no incoming bearing on the first step
+    selected: list[OTMPlace] = []
+    remaining = list(scored)
 
-    tagged = [
-        (poi, sc, haversine(start_lat, start_lon, poi.lat, poi.lon),
-         _bearing(start_lat, start_lon, poi.lat, poi.lon))
-        for poi, sc in pool
-    ]
-    tagged.sort(key=lambda t: t[2])  # nearest-first
+    for _ in range(num_pois):
+        if not remaining:
+            break
 
-    # Seed: score-weighted circular mean bearing of all candidates.
-    sin_sum = sum(sc * math.sin(math.radians(bear)) for _, sc, _, bear in tagged)
-    cos_sum = sum(sc * math.cos(math.radians(bear)) for _, sc, _, bear in tagged)
-    corridor_dir = (math.degrees(math.atan2(sin_sum, cos_sum)) + 360) % 360
+        def _turn_ok(plat: float, plon: float) -> bool:
+            if not has_direction:
+                return True
+            incoming = _bearing(prev_lat, prev_lon, current_lat, current_lon)
+            outgoing = _bearing(current_lat, current_lon, plat, plon)
+            turn = abs((outgoing - incoming + 180) % 360 - 180)
+            return turn <= _MAX_TURN_DEG
 
-    HALF_ANGLE = 40.0  # degrees either side of the spine
-    ADAPT_RATE = 0.25  # how much accepted POIs nudge the spine direction
+        def _dist_ok(poi: OTMPlace) -> bool:
+            return all(haversine(poi.lat, poi.lon, s.lat, s.lon) >= min_dist for s in selected)
 
-    kept: list[tuple[OTMPlace, float]] = []
-    for poi, sc, _dist, bear in tagged:
-        diff = (bear - corridor_dir + 180) % 360 - 180
-        if abs(diff) <= HALF_ANGLE:
-            kept.append((poi, sc))
-            corridor_dir = (corridor_dir + ADAPT_RATE * diff + 360) % 360
+        best: tuple[OTMPlace, float] | None = None
 
-    # Fallback: widen to a hemisphere if the corridor captured too few POIs.
-    if len(kept) < 2:
-        tagged_hem = [(poi, sc, bear) for poi, sc, _dist, bear in tagged]
-        tagged_hem.sort(key=lambda t: t[2])
-        bearings = [t[2] for t in tagged_hem]
-        scores = [t[1] for t in tagged_hem]
-        n = len(tagged_hem)
-        bearings2 = bearings + [b + 360 for b in bearings]
-        scores2 = scores + scores
-        best_score, best_start, best_end, j, window_score = -1.0, 0, 0, 0, 0.0
-        for i in range(n):
-            while j < len(bearings2) and bearings2[j] < bearings2[i] + 180:
-                window_score += scores2[j]
-                j += 1
-            if window_score > best_score:
-                best_score, best_start, best_end = window_score, i, j
-            window_score -= scores2[i]
-        chosen = {idx % n for idx in range(best_start, best_end)}
-        kept = [(tagged_hem[idx][0], tagged_hem[idx][1]) for idx in range(n) if idx in chosen]
+        # Phase 1: radius + turn + min_dist
+        for mult in (1.0, 1.8, 3.5):
+            search_r = step_radius * _STEP_SEARCH_FACTOR * mult
+            candidates = [
+                (poi, sc) for poi, sc in remaining
+                if (haversine(current_lat, current_lon, poi.lat, poi.lon) <= search_r
+                    and _dist_ok(poi) and _turn_ok(poi.lat, poi.lon))
+            ]
+            if candidates:
+                best = max(candidates, key=lambda x: x[1])
+                break
 
-    return kept if kept else pool
+        # Phase 2: drop radius, keep turn + min_dist
+        if best is None:
+            candidates = [
+                (poi, sc) for poi, sc in remaining
+                if _dist_ok(poi) and _turn_ok(poi.lat, poi.lon)
+            ]
+            if candidates:
+                best = max(candidates, key=lambda x: x[1])
+
+        # Phase 3: drop turn constraint, keep min_dist
+        if best is None:
+            candidates = [
+                (poi, sc) for poi, sc in remaining if _dist_ok(poi)
+            ]
+            if candidates:
+                best = max(candidates, key=lambda x: x[1])
+
+        # Phase 4: drop all constraints — absolute last resort
+        if best is None and remaining:
+            best = max(remaining, key=lambda x: x[1])
+
+        if best is None:
+            break
+
+        best_poi, _ = best
+        prev_lat, prev_lon = current_lat, current_lon
+        current_lat, current_lon = best_poi.lat, best_poi.lon
+        has_direction = True
+        selected.append(best_poi)
+        remaining = [(p, sc) for p, sc in remaining if p.xid != best_poi.xid]
+
+    return selected
 
 
 async def _upsert_pois(db: AsyncSession, pois: list[OTMPlace]) -> None:
@@ -163,6 +187,11 @@ async def generate_route(
         raise ValueError("Не выбрано ни одной допустимой категории.")
     selected_kinds = set(otm_kinds)
 
+    # step_radius: expected straight-line distance between consecutive POIs
+    step_distance = distance_m / num_pois
+    step_radius = step_distance / _ROAD_FACTOR
+
+    # Fetch all candidates covering the full route area from the start point
     radius_m = min(int(distance_m / _ROAD_FACTOR), 5000)
     fetch_limit = min(max(num_pois * 30, 200), 500)
 
@@ -184,16 +213,11 @@ async def generate_route(
     scored = [(p, _score(p, selected_kinds, user_prefs)) for p in candidates]
     scored = [(p, s) for p, s in scored if s >= _MIN_SCORE]
 
-    pool = _decluster(scored)
-    pool = _corridor_filter(start_lat, start_lon, pool)
-    if len(pool) < 2:
+    ordered_pois = _select_by_steps(scored, start_lat, start_lon, num_pois, step_radius)
+    if len(ordered_pois) < 2:
         raise ValueError("Недостаточно объектов в данном районе. Попробуйте увеличить расстояние или изменить категории.")
 
-    top = sorted(
-        (p for p, _ in pool[:num_pois]),
-        key=lambda p: haversine(start_lat, start_lon, p.lat, p.lon),
-    )
-    waypoints = [(start_lat, start_lon)] + [(p.lat, p.lon) for p in top]
+    waypoints = [(start_lat, start_lon)] + [(p.lat, p.lon) for p in ordered_pois]
     osrm = OSRMClient(http_client)
     try:
         trip = await osrm.get_pairwise_routes(waypoints)
@@ -201,8 +225,6 @@ async def generate_route(
         raise httpx.HTTPStatusError(
             f"Routing service error: {e.response.status_code}", request=e.request, response=e.response
         )
-
-    ordered_pois = top
 
     await _upsert_pois(db, ordered_pois)
     await db.commit()
