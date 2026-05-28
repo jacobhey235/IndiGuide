@@ -66,6 +66,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoutesStore } from '@/stores/routes'
 import type { POI } from '@/types'
+import { translateKind } from '@/constants/kindTranslations'
 
 const props = defineProps<{ poi: POI }>()
 defineEmits<{ close: [] }>()
@@ -77,7 +78,7 @@ const loading = ref(false)
 const kindsList = computed(() =>
   props.poi.kinds
     .split(',')
-    .map((k) => k.trim().replace(/_/g, ' '))
+    .map(translateKind)
     .filter(Boolean)
     .slice(0, 5),
 )

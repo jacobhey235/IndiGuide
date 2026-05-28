@@ -90,6 +90,7 @@ import { ref, watch, onMounted } from 'vue'
 import { useRoutesStore } from '@/stores/routes'
 import { CATEGORIES } from '@/constants/categories'
 import type { PublicRoute } from '@/types'
+import { translateKind } from '@/constants/kindTranslations'
 
 const emit = defineEmits<{ select: [id: string] }>()
 
@@ -136,7 +137,7 @@ function topKinds(route: PublicRoute): string[] {
   return Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
-    .map(([k]) => k.replace(/_/g, ' '))
+    .map(([k]) => translateKind(k))
 }
 
 onMounted(load)

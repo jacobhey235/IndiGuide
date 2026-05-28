@@ -126,7 +126,7 @@
         </div>
 
         <button
-          v-if="nextWaypoint"
+          v-if="nextWaypoint && nextPoiHasExcerpt"
           class="mt-2 w-full text-center text-sm text-blue-600 py-1"
           @click="selectedPOI = nextWaypoint!.poi"
         >
@@ -160,6 +160,7 @@ import AppMap from '@/components/AppMap.vue'
 import POIModal from '@/components/POIModal.vue'
 import { useRoutesStore } from '@/stores/routes'
 import type { POI } from '@/types'
+import { translateKind } from '@/constants/kindTranslations'
 
 const vRoute = useRoute()
 const router = useRouter()
@@ -171,6 +172,8 @@ const finishing = ref(false)
 const showEndConfirm = ref(false)
 const selectedPOI = ref<POI | null>(null)
 const mapRef = ref<InstanceType<typeof AppMap> | null>(null)
+
+const nextPoiHasExcerpt = ref<boolean | null>(null)
 
 const justVisitedId = ref<number | null>(null)
 const justVisitedName = ref('')
@@ -189,17 +192,36 @@ const visitedCount = computed(() => sortedWaypoints.value.filter((w) => w.is_vis
 const totalCount = computed(() => sortedWaypoints.value.length)
 const progressPct = computed(() => totalCount.value ? (visitedCount.value / totalCount.value) * 100 : 0)
 const kindsList = computed(() =>
-  (nextWaypoint.value?.poi.kinds ?? '').split(',').map((k) => k.trim().replace(/_/g, ' ')).filter(Boolean).slice(0, 3),
+  (nextWaypoint.value?.poi.kinds ?? '').split(',').map(translateKind).filter(Boolean).slice(0, 3),
 )
+
+async function checkNextPoiExcerpt() {
+  const wp = nextWaypoint.value
+  if (!wp) { nextPoiHasExcerpt.value = null; return }
+  if (wp.poi.wikipedia_excerpt !== undefined) {
+    nextPoiHasExcerpt.value = Boolean(wp.poi.wikipedia_excerpt)
+    return
+  }
+  nextPoiHasExcerpt.value = null
+  try {
+    const detail = await store.fetchPOIDetail(wp.poi.xid)
+    if (nextWaypoint.value?.poi.xid === wp.poi.xid) {
+      nextPoiHasExcerpt.value = Boolean(detail.wikipedia_excerpt)
+    }
+  } catch {
+    nextPoiHasExcerpt.value = false
+  }
+}
 
 onMounted(async () => {
   await store.fetchRoute(routeId)
   centerOnNext()
+  checkNextPoiExcerpt()
 })
 
 // Only focus immediately on load (justVisitedId === null); after markVisited the
 // rating card is shown and focus is deferred to the watch below.
-watch(nextWaypoint, () => { if (justVisitedId.value === null) centerOnNext() }, { flush: 'post' })
+watch(nextWaypoint, () => { if (justVisitedId.value === null) centerOnNext(); checkNextPoiExcerpt() }, { flush: 'post' })
 // Re-centre once the rating card is dismissed and the normal-flow card (taller) is shown.
 watch(justVisitedId, (id) => { if (id === null) centerOnNext() }, { flush: 'post' })
 

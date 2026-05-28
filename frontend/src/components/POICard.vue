@@ -41,6 +41,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Waypoint } from '@/types'
+import { translateKind } from '@/constants/kindTranslations'
 
 const props = defineProps<{
   waypoint: Waypoint
@@ -55,7 +56,7 @@ const kindLabel = computed(() =>
   props.waypoint.poi.kinds
     .split(',')
     .slice(0, 2)
-    .map((k) => k.trim().replace(/_/g, ' '))
+    .map(translateKind)
     .filter(Boolean)
     .join(' · '),
 )
