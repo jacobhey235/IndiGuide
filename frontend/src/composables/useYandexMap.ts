@@ -11,7 +11,7 @@ export function useYandexMap(containerId: string, initialCenter: [number, number
 
   onMounted(async () => {
     await ymaps.ready()
-    mapInstance.value = new ymaps.Map(containerId, { center: initialCenter, zoom: 13 }, {
+    mapInstance.value = new ymaps.Map(containerId, { center: initialCenter, zoom: 13, controls: [] }, {
       suppressMapOpenBlock: true,
     })
     isReady.value = true

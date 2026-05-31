@@ -9,7 +9,6 @@
     <!-- Desktop left panel (md+) -->
     <div class="hidden md:flex md:flex-col w-[380px] bg-white shadow-2xl z-10 flex-shrink-0">
       <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-        <span class="text-xl font-bold text-gray-900">IndiGuide</span>
         <div class="flex gap-2">
           <button
             v-if="auth.isAuthenticated()"
@@ -147,7 +146,6 @@
 
     <!-- Mobile top bar (hidden on desktop) -->
     <div class="absolute left-0 right-0 top-0 flex items-center justify-between px-4 py-3 safe-top md:hidden">
-      <span class="text-xl font-bold tracking-tight text-white drop-shadow">IndiGuide</span>
       <div class="flex gap-2">
         <button
           v-if="auth.isAuthenticated()"
