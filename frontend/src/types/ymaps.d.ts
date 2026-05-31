@@ -5,6 +5,7 @@ declare namespace ymaps {
   interface MapState {
     center: [number, number]
     zoom: number
+    controls?: string[]
   }
 
   interface MapOptions {
