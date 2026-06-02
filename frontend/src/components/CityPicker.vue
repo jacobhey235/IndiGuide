@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, onMounted } from 'vue'
 
 interface City { name: string; lat: number; lon: number }
 
@@ -138,6 +138,20 @@ function select(city: City) {
   open.value = false
   query.value = ''
   searchResults.value = []
+  localStorage.setItem('lastCity', JSON.stringify(city))
   emit('select', city.lat, city.lon, city.name)
 }
+
+onMounted(() => {
+  const saved = localStorage.getItem('lastCity')
+  if (saved) {
+    try {
+      const city: City = JSON.parse(saved)
+      currentCity.value = city.name
+      emit('select', city.lat, city.lon, city.name)
+    } catch {
+      localStorage.removeItem('lastCity')
+    }
+  }
+})
 </script>

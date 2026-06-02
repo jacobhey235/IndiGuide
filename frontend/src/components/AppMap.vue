@@ -12,6 +12,7 @@ const props = defineProps<{
   selectedLat?: number | null
   selectedLon?: number | null
   clickable?: boolean
+  initialCenter?: [number, number]
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +20,7 @@ const emit = defineEmits<{
 }>()
 
 const { isReady, clearObjects, addPlacemark, drawRoute, drawSegmentedRoute, drawSegment, onMapClick, panTo, fitToBounds, fitViewport } =
-  useYandexMap('yandex-map')
+  useYandexMap('yandex-map', props.initialCenter)
 
 watch(isReady, (ready) => {
   if (!ready) return

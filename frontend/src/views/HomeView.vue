@@ -206,6 +206,7 @@
       :selected-lat="startLat"
       :selected-lon="startLon"
       :clickable="true"
+      :initial-center="initialMapCenter"
       class="absolute inset-0 md:relative md:inset-auto md:flex-1"
       @point-selected="onPointSelected"
     />
@@ -452,6 +453,19 @@ const router = useRouter()
 const auth = useAuthStore()
 const routesStore = useRoutesStore()
 const mapRef = ref<InstanceType<typeof AppMap> | null>(null)
+
+function getSavedCenter(): [number, number] {
+  try {
+    const saved = localStorage.getItem('lastCity')
+    if (saved) {
+      const city = JSON.parse(saved)
+      return [city.lat, city.lon]
+    }
+  } catch {}
+  return [55.7558, 37.6173]
+}
+
+const initialMapCenter = getSavedCenter()
 
 const activeTab = ref<'explore' | 'create'>('explore')
 const drawerOpen = ref(true)
