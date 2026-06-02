@@ -70,8 +70,12 @@ export const useRoutesStore = defineStore('routes', () => {
     return data
   }
 
-  async function rateWaypoint(routeId: string, waypointId: number, rating: number): Promise<void> {
-    await client.post(`/routes/${routeId}/waypoints/${waypointId}/rate`, { rating })
+  async function likeWaypoint(routeId: string, waypointId: number): Promise<void> {
+    await client.post(`/routes/${routeId}/waypoints/${waypointId}/like`)
+  }
+
+  async function dislikeWaypoint(routeId: string, waypointId: number): Promise<void> {
+    await client.post(`/routes/${routeId}/waypoints/${waypointId}/dislike`)
   }
 
   async function saveRoute(id: string): Promise<Route | null> {
@@ -131,7 +135,8 @@ export const useRoutesStore = defineStore('routes', () => {
     startRoute,
     endRoute,
     visitWaypoint,
-    rateWaypoint,
+    likeWaypoint,
+    dislikeWaypoint,
     suggestWaypoint,
     fetchPOIDetail,
     fetchExploreRoutes,

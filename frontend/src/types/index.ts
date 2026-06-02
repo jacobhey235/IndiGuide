@@ -70,6 +70,7 @@ export interface GenerateRouteRequest {
   num_pois: number
   selected_categories?: string[]
   name?: string
+  include_disliked?: boolean
 }
 
 export interface RouteUpdateRequest {

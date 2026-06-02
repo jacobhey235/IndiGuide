@@ -87,6 +87,15 @@
         </p>
       </div>
 
+      <label class="flex items-center gap-3 cursor-pointer select-none py-1">
+        <span class="relative inline-flex h-6 w-11 flex-shrink-0">
+          <input type="checkbox" class="peer sr-only" v-model="includeDisliked" />
+          <span class="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-blue-500"></span>
+          <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5"></span>
+        </span>
+        <span class="text-sm text-gray-600">Показывать нелюбимые места</span>
+      </label>
+
       <button
         :disabled="!selectedLat || loading || (!usePrefs && selected.size === 0)"
         class="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 min-h-[48px]"
@@ -116,7 +125,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  generate: [req: { distance_m: number; num_pois: number; selected_categories?: string[] }]
+  generate: [req: { distance_m: number; num_pois: number; selected_categories?: string[]; include_disliked?: boolean }]
 }>()
 
 const form = reactive({ distance_m: 3000, num_pois: 4 })
@@ -128,6 +137,7 @@ watch(maxPois, (max) => {
 })
 const usePrefs = ref(true)
 const selected = ref<Set<string>>(new Set(['historic', 'architecture']))
+const includeDisliked = ref(false)
 
 function toggle(key: string) {
   const next = new Set(selected.value)
@@ -143,6 +153,7 @@ function submit() {
     distance_m: form.distance_m,
     num_pois: form.num_pois,
     ...(usePrefs.value ? {} : { selected_categories: Array.from(selected.value) }),
+    ...(includeDisliked.value ? { include_disliked: true } : {}),
   })
 }
 </script>

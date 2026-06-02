@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.poi import POI
 from app.models.preferences import POIInteraction, UserPreference
 
-_ALPHA_PASSIVE = 0.15  # EMA smoothing for passive visit / removal signals
-_ALPHA_ACTIVE = 0.35   # stronger EMA for explicit user ratings
+_ALPHA_PASSIVE = 0.15    # EMA smoothing for passive visit / removal signals
+_ALPHA_REACTION = 0.22   # slightly stronger EMA for explicit like / dislike
 
 
 async def get_preference_map(db: AsyncSession, user_id: uuid.UUID) -> dict[str, float]:
@@ -18,6 +18,15 @@ async def get_preference_map(db: AsyncSession, user_id: uuid.UUID) -> dict[str, 
         select(UserPreference).where(UserPreference.user_id == user_id)
     )
     return {p.poi_kind: p.score for p in result.scalars().all()}
+
+
+async def get_disliked_poi_xids(db: AsyncSession, user_id: uuid.UUID) -> set[str]:
+    result = await db.execute(
+        select(POIInteraction.poi_xid)
+        .where(POIInteraction.user_id == user_id)
+        .where(POIInteraction.interaction_type == "disliked")
+    )
+    return set(result.scalars().all())
 
 
 async def update_on_visit(
@@ -50,19 +59,31 @@ async def update_on_removal(
     await db.commit()
 
 
-async def update_on_rating(
-    db: AsyncSession, user_id: uuid.UUID, poi: POI, rating: int, route_id: uuid.UUID | None = None
+async def update_on_like(
+    db: AsyncSession, user_id: uuid.UUID, poi: POI, route_id: uuid.UUID | None = None
 ) -> None:
-    # Normalise 1-5 → 0.0-1.0, then apply a stronger EMA step
-    target = (rating - 1) / 4.0
-    await _apply_ema(db, user_id, poi, target=target, alpha=_ALPHA_ACTIVE)
+    await _apply_ema(db, user_id, poi, target=1.0, alpha=_ALPHA_REACTION)
     db.add(
         POIInteraction(
             user_id=user_id,
             poi_xid=poi.xid,
             route_id=route_id,
-            interaction_type="rated",
-            rating=rating,
+            interaction_type="liked",
+        )
+    )
+    await db.commit()
+
+
+async def update_on_dislike(
+    db: AsyncSession, user_id: uuid.UUID, poi: POI, route_id: uuid.UUID | None = None
+) -> None:
+    await _apply_ema(db, user_id, poi, target=0.0, alpha=_ALPHA_REACTION)
+    db.add(
+        POIInteraction(
+            user_id=user_id,
+            poi_xid=poi.xid,
+            route_id=route_id,
+            interaction_type="disliked",
         )
     )
     await db.commit()

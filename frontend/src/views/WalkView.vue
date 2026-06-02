@@ -29,28 +29,30 @@
     <!-- Bottom card anchored to the bottom of the screen -->
     <div ref="bottomCardRef" class="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl px-4 pt-4 pb-4 safe-bottom shadow-2xl" style="min-height: 220px;">
 
-      <!-- Rating block: shown right after "Я на месте", before moving on -->
+      <!-- Reaction block: shown right after "Я на месте", before moving on -->
       <div v-if="justVisitedId !== null" class="py-1">
         <div class="flex items-center gap-2 mb-3">
           <span class="text-green-500 text-xl font-bold">✓</span>
           <span class="font-semibold text-gray-900 truncate">{{ justVisitedName }}</span>
         </div>
-        <p class="text-sm text-gray-500 mb-3">Понравилось? Оцените по желанию:</p>
-        <div class="flex items-center">
-          <div class="flex gap-1">
-            <button
-              v-for="star in 5"
-              :key="star"
-              :disabled="submittingRating"
-              @click="rateAndContinue(star)"
-              class="text-4xl leading-none disabled:opacity-40 active:scale-90 transition-transform"
-              :class="star <= highlightedRating ? 'text-amber-400' : 'text-gray-300'"
-              @mouseenter="highlightedRating = star"
-              @mouseleave="highlightedRating = 0"
-            >★</button>
-          </div>
+        <p class="text-sm text-gray-500 mb-3">Понравилось место?</p>
+        <div class="flex items-center gap-3">
           <button
-            class="ml-auto text-sm text-gray-400 py-2 px-1 disabled:opacity-40"
+            class="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-50 border border-green-200 py-3 text-green-700 font-medium text-sm disabled:opacity-40 active:scale-95 transition-transform"
+            :disabled="submittingRating"
+            @click="react(true)"
+          >
+            <span class="text-xl">👍</span> Да
+          </button>
+          <button
+            class="flex-1 flex items-center justify-center gap-2 rounded-xl bg-red-50 border border-red-200 py-3 text-red-700 font-medium text-sm disabled:opacity-40 active:scale-95 transition-transform"
+            :disabled="submittingRating"
+            @click="react(false)"
+          >
+            <span class="text-xl">👎</span> Нет
+          </button>
+          <button
+            class="text-sm text-gray-400 py-3 px-1 disabled:opacity-40 flex-shrink-0"
             :disabled="submittingRating"
             @click="skipRating"
           >
@@ -177,7 +179,6 @@ const nextPoiHasExcerpt = ref<boolean | null>(null)
 
 const justVisitedId = ref<number | null>(null)
 const justVisitedName = ref('')
-const highlightedRating = ref(0)
 const submittingRating = ref(false)
 
 const routeId = vRoute.params.id as string
@@ -238,29 +239,30 @@ async function markVisited() {
     await store.visitWaypoint(route.value.id, wp.id)
     justVisitedId.value = wp.id
     justVisitedName.value = wp.poi.name
-    highlightedRating.value = 0
   } finally {
     marking.value = false
   }
 }
 
-async function rateAndContinue(rating: number) {
+async function react(liked: boolean) {
   if (!route.value || justVisitedId.value === null) return
   submittingRating.value = true
   try {
-    await store.rateWaypoint(route.value.id, justVisitedId.value, rating)
+    if (liked) {
+      await store.likeWaypoint(route.value.id, justVisitedId.value)
+    } else {
+      await store.dislikeWaypoint(route.value.id, justVisitedId.value)
+    }
   } finally {
     submittingRating.value = false
     justVisitedId.value = null
     justVisitedName.value = ''
-    highlightedRating.value = 0
   }
 }
 
 function skipRating() {
   justVisitedId.value = null
   justVisitedName.value = ''
-  highlightedRating.value = 0
 }
 
 async function finishRoute(save: boolean) {

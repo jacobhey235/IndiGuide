@@ -589,7 +589,7 @@ function onExploreSelect(id: string) {
   router.push(`/explore/${id}`)
 }
 
-async function onGenerate(req: { distance_m: number; num_pois: number; selected_categories?: string[] }) {
+async function onGenerate(req: { distance_m: number; num_pois: number; selected_categories?: string[]; include_disliked?: boolean }) {
   if (!auth.isAuthenticated()) { showAuth.value = true; return }
   if (!startLat.value || !startLon.value) return
 

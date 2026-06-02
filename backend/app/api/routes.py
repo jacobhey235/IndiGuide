@@ -19,7 +19,6 @@ from app.schemas.route import (
     NavigationResponse,
     PublicRouteOut,
     PublicRouteSummary,
-    RateWaypointRequest,
     RouteGenerateRequest,
     RouteOut,
     RouteSummary,
@@ -235,6 +234,7 @@ async def generate(
             num_pois=body.num_pois,
             selected_categories=body.selected_categories,
             name=body.name,
+            include_disliked=body.include_disliked,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -490,11 +490,10 @@ async def visit_waypoint(
     return await _get_user_route(route_id, user, db)
 
 
-@router.post("/{route_id}/waypoints/{waypoint_id}/rate", status_code=204)
-async def rate_waypoint(
+@router.post("/{route_id}/waypoints/{waypoint_id}/like", status_code=204)
+async def like_waypoint(
     route_id: uuid.UUID,
     waypoint_id: int,
-    body: RateWaypointRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -505,4 +504,21 @@ async def rate_waypoint(
     if not wp.is_visited:
         raise HTTPException(status_code=400, detail="Нельзя оценить непосещённую точку")
 
-    await pref_svc.update_on_rating(db, user.id, wp.poi, body.rating, route.id)
+    await pref_svc.update_on_like(db, user.id, wp.poi, route.id)
+
+
+@router.post("/{route_id}/waypoints/{waypoint_id}/dislike", status_code=204)
+async def dislike_waypoint(
+    route_id: uuid.UUID,
+    waypoint_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    route = await _get_user_route(route_id, user, db)
+    wp = next((w for w in route.waypoints if w.id == waypoint_id), None)
+    if wp is None:
+        raise HTTPException(status_code=404, detail="Точка маршрута не найдена")
+    if not wp.is_visited:
+        raise HTTPException(status_code=400, detail="Нельзя оценить непосещённую точку")
+
+    await pref_svc.update_on_dislike(db, user.id, wp.poi, route.id)

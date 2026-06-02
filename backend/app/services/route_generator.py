@@ -12,7 +12,7 @@ from app.models.route import Route, RouteStatus, RouteWaypoint
 from app.models.user import User
 from app.services.opentripmap import OTMPlace, OpenTripMapClient
 from app.services.osrm import OSRMClient
-from app.services.preferences import get_preference_map
+from app.services.preferences import get_disliked_poi_xids, get_preference_map
 from app.services.route_categories import CATEGORIES
 from app.services.route_categories import expand as expand_categories
 
@@ -375,8 +375,10 @@ async def generate_route(
     num_pois: int,
     selected_categories: list[str] | None,
     name: str | None,
+    include_disliked: bool = False,
 ) -> Route:
     user_prefs = await get_preference_map(db, user.id)
+    disliked_xids = set() if include_disliked else await get_disliked_poi_xids(db, user.id)
     is_explicit = bool(selected_categories)
 
     otm = OpenTripMapClient(http_client)
@@ -398,6 +400,9 @@ async def generate_route(
             otm, start_lat, start_lon, fetch_radius, user_prefs, num_pois
         )
         selected_kinds = set(expand_categories(list(CATEGORIES.keys())))
+
+    if disliked_xids:
+        pois = [p for p in pois if p.xid not in disliked_xids]
 
     if not pois:
         raise ValueError(

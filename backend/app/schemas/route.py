@@ -96,6 +96,7 @@ class RouteGenerateRequest(BaseModel):
     num_pois: int = Field(ge=2, le=15)
     selected_categories: list[str] | None = Field(default=None, max_length=7)
     name: str | None = None
+    include_disliked: bool = False
 
 
 class SuggestWaypointRequest(BaseModel):
@@ -110,10 +111,6 @@ class RouteUpdateRequest(BaseModel):
     add_poi_xid: str | None = None
     is_saved: bool | None = None
     is_published: bool | None = None
-
-
-class RateWaypointRequest(BaseModel):
-    rating: int = Field(ge=1, le=5)
 
 
 class NavigationResponse(BaseModel):
