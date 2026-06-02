@@ -69,10 +69,63 @@
           </button>
           <button
             class="mt-2 w-full text-center text-sm text-gray-400 py-1 hover:text-gray-600 transition-colors"
-            @click="generatedRoute = null"
+            @click="createNewRoute"
           >
             Создать новый маршрут
           </button>
+        </div>
+
+        <!-- Add point controls (desktop) -->
+        <div v-if="generatedRoute.status === 'draft'" class="px-5 py-3 border-b border-gray-100 flex-shrink-0">
+          <button
+            v-if="!addPointMode"
+            class="w-full rounded-xl border border-dashed border-blue-300 py-2.5 text-sm text-blue-500 hover:bg-blue-50 transition-colors"
+            @click="addPointMode = true"
+          >
+            + Добавить точку
+          </button>
+          <div
+            v-else-if="!suggesting && !suggestedPOI && !addError"
+            class="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700 flex justify-between items-center"
+          >
+            <span>Нажмите на карту, чтобы выбрать место</span>
+            <button class="text-blue-400 font-medium ml-3" @click="cancelAdd">Отмена</button>
+          </div>
+          <div
+            v-else-if="suggesting"
+            class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-500"
+          >
+            Ищем ближайшее место…
+          </div>
+          <div
+            v-else-if="addError"
+            class="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 flex justify-between items-center"
+          >
+            <span>{{ addError }}</span>
+            <button class="text-red-400 ml-3" @click="cancelAdd">Закрыть</button>
+          </div>
+          <div
+            v-else-if="suggestedPOI"
+            class="rounded-xl bg-white border border-green-300 shadow-sm px-4 py-3"
+          >
+            <p class="text-xs text-gray-400 mb-0.5">Найдено поблизости</p>
+            <p class="font-semibold text-gray-900">{{ suggestedPOI.name }}</p>
+            <p class="text-xs text-gray-500 mt-0.5">{{ suggestedPOI.kinds.split(',')[0] }}</p>
+            <div class="flex gap-2 mt-3">
+              <button
+                class="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white"
+                @click="confirmAdd"
+              >
+                Добавить
+              </button>
+              <button
+                class="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500"
+                @click="cancelAdd"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="flex-1 overflow-y-auto divide-y divide-gray-50">
@@ -237,11 +290,65 @@
             </button>
             <button
               class="mt-1.5 w-full text-center text-sm text-gray-400 py-1"
-              @click="generatedRoute = null"
+              @click="createNewRoute"
             >
               Создать новый маршрут
             </button>
           </div>
+
+          <!-- Add point controls (mobile) -->
+          <div v-if="generatedRoute.status === 'draft'" class="px-4 py-3 border-b border-gray-100 flex-shrink-0">
+            <button
+              v-if="!addPointMode"
+              class="w-full rounded-xl border border-dashed border-blue-300 py-2.5 text-sm text-blue-500 hover:bg-blue-50 transition-colors"
+              @click="addPointMode = true"
+            >
+              + Добавить точку
+            </button>
+            <div
+              v-else-if="!suggesting && !suggestedPOI && !addError"
+              class="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700 flex justify-between items-center"
+            >
+              <span>Нажмите на карту, чтобы выбрать место</span>
+              <button class="text-blue-400 font-medium ml-3" @click="cancelAdd">Отмена</button>
+            </div>
+            <div
+              v-else-if="suggesting"
+              class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-500"
+            >
+              Ищем ближайшее место…
+            </div>
+            <div
+              v-else-if="addError"
+              class="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 flex justify-between items-center"
+            >
+              <span>{{ addError }}</span>
+              <button class="text-red-400 ml-3" @click="cancelAdd">Закрыть</button>
+            </div>
+            <div
+              v-else-if="suggestedPOI"
+              class="rounded-xl bg-white border border-green-300 shadow-sm px-4 py-3"
+            >
+              <p class="text-xs text-gray-400 mb-0.5">Найдено поблизости</p>
+              <p class="font-semibold text-gray-900">{{ suggestedPOI.name }}</p>
+              <p class="text-xs text-gray-500 mt-0.5">{{ suggestedPOI.kinds.split(',')[0] }}</p>
+              <div class="flex gap-2 mt-3">
+                <button
+                  class="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white"
+                  @click="confirmAdd"
+                >
+                  Добавить
+                </button>
+                <button
+                  class="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500"
+                  @click="cancelAdd"
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div class="flex-1 overflow-y-auto divide-y divide-gray-50 min-h-0">
             <div
               v-for="(wp, i) in sortedWaypoints"
@@ -336,7 +443,7 @@ import AuthModal from '@/components/AuthModal.vue'
 import PublicRoutesFeed from '@/components/PublicRoutesFeed.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRoutesStore } from '@/stores/routes'
-import type { Route } from '@/types'
+import type { Route, POI } from '@/types'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -350,6 +457,10 @@ const startLat = ref<number | null>(null)
 const startLon = ref<number | null>(null)
 const generatedRoute = ref<Route | null>(null)
 const errorMsg = ref('')
+const addPointMode = ref(false)
+const suggesting = ref(false)
+const suggestedPOI = ref<POI | null>(null)
+const addError = ref<string | null>(null)
 
 onMounted(() => {
   if (!auth.isAuthenticated()) {
@@ -455,6 +566,10 @@ function onDrawerTransitionEnd() {
 // ──────────────────────────────────────────────────────────────────────────
 
 function onPointSelected(lat: number, lon: number) {
+  if (generatedRoute.value && addPointMode.value) {
+    onMapTap(lat, lon)
+    return
+  }
   startLat.value = lat
   startLon.value = lon
   if (!drawerOpen.value) drawerOpen.value = true
@@ -469,6 +584,7 @@ async function onGenerate(req: { distance_m: number; num_pois: number; selected_
   if (!auth.isAuthenticated()) { showAuth.value = true; return }
   if (!startLat.value || !startLon.value) return
 
+  cancelAdd()
   errorMsg.value = ''
   try {
     generatedRoute.value = await routesStore.generateRoute({
@@ -482,6 +598,45 @@ async function onGenerate(req: { distance_m: number; num_pois: number; selected_
     errorMsg.value = msg ?? 'Не удалось создать маршрут. Попробуйте ещё раз.'
     setTimeout(() => { errorMsg.value = '' }, 4000)
   }
+}
+
+async function onMapTap(lat: number, lon: number) {
+  if (!generatedRoute.value) return
+  suggesting.value = true
+  addError.value = null
+  suggestedPOI.value = null
+  drawerOpen.value = true
+  try {
+    suggestedPOI.value = await routesStore.suggestWaypoint(generatedRoute.value.id, lat, lon)
+  } catch {
+    addError.value = 'Рядом не найдено подходящих мест. Попробуйте другое место.'
+  } finally {
+    suggesting.value = false
+  }
+}
+
+async function confirmAdd() {
+  if (!suggestedPOI.value || !generatedRoute.value) return
+  try {
+    const updated = await routesStore.updateRoute(generatedRoute.value.id, { add_poi_xid: suggestedPOI.value.xid })
+    if (updated) generatedRoute.value = updated
+    addPointMode.value = false
+    suggestedPOI.value = null
+  } catch {
+    addError.value = 'Не удалось добавить точку. Попробуйте ещё раз.'
+    suggestedPOI.value = null
+  }
+}
+
+function cancelAdd() {
+  addPointMode.value = false
+  suggestedPOI.value = null
+  addError.value = null
+}
+
+function createNewRoute() {
+  cancelAdd()
+  generatedRoute.value = null
 }
 
 async function startWalk() {

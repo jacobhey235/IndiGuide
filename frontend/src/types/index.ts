@@ -76,6 +76,7 @@ export interface RouteUpdateRequest {
   name?: string
   waypoint_order?: string[]
   remove_poi_xids?: string[]
+  add_poi_xid?: string
   is_saved?: boolean
   is_published?: boolean
 }

@@ -2,7 +2,7 @@
   <div class="flex flex-col h-dvh bg-gray-50">
     <!-- Map: top 45% -->
     <div class="h-[45dvh] flex-shrink-0">
-      <AppMap :route="store.currentRoute" class="w-full h-full" />
+      <AppMap :route="store.currentRoute" :clickable="true" class="w-full h-full" @point-selected="onMapTap" />
     </div>
 
     <!-- Bottom panel -->
@@ -36,6 +36,59 @@
       <!-- Waypoint list -->
       <div class="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         <div v-if="!route" class="flex items-center justify-center h-full text-gray-400">Загрузка…</div>
+
+        <!-- Add-point controls (edit mode only) -->
+        <template v-if="editMode && route?.status === 'draft'">
+          <button
+            v-if="!addPointMode"
+            class="w-full rounded-xl border border-dashed border-blue-300 py-2.5 text-sm text-blue-500"
+            @click="addPointMode = true"
+          >
+            + Добавить точку
+          </button>
+          <div
+            v-else-if="!suggesting && !suggestedPOI && !addError"
+            class="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700 flex justify-between items-center"
+          >
+            <span>Нажмите на карту, чтобы выбрать место</span>
+            <button class="text-blue-400 font-medium ml-3" @click="cancelAdd">Отмена</button>
+          </div>
+          <div
+            v-else-if="suggesting"
+            class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-500"
+          >
+            Ищем ближайшее место…
+          </div>
+          <div
+            v-else-if="addError"
+            class="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 flex justify-between items-center"
+          >
+            <span>{{ addError }}</span>
+            <button class="text-red-400 ml-3" @click="cancelAdd">Закрыть</button>
+          </div>
+          <div
+            v-else-if="suggestedPOI"
+            class="rounded-xl bg-white border border-green-300 shadow-sm px-4 py-3"
+          >
+            <p class="text-xs text-gray-400 mb-0.5">Найдено поблизости</p>
+            <p class="font-semibold text-gray-900">{{ suggestedPOI.name }}</p>
+            <p class="text-xs text-gray-500 mt-0.5">{{ suggestedPOI.kinds.split(',')[0] }}</p>
+            <div class="flex gap-2 mt-3">
+              <button
+                class="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white"
+                @click="confirmAdd"
+              >
+                Добавить
+              </button>
+              <button
+                class="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500"
+                @click="cancelAdd"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </template>
 
         <POICard
           v-for="(wp, i) in route?.waypoints"
@@ -164,6 +217,10 @@ const editMode = ref(false)
 const saving = ref(false)
 const publishing = ref(false)
 const selectedPOI = ref<POI | null>(null)
+const addPointMode = ref(false)
+const suggesting = ref(false)
+const suggestedPOI = ref<POI | null>(null)
+const addError = ref<string | null>(null)
 
 const route = computed(() => store.currentRoute)
 
@@ -236,5 +293,37 @@ async function removeWaypoint(xid: string) {
   if (!route.value) return
   const result = await store.updateRoute(route.value.id, { remove_poi_xids: [xid] })
   if (result === null) router.push('/')
+}
+
+async function onMapTap(lat: number, lon: number) {
+  if (!addPointMode.value || !route.value) return
+  suggesting.value = true
+  addError.value = null
+  suggestedPOI.value = null
+  try {
+    suggestedPOI.value = await store.suggestWaypoint(route.value.id, lat, lon)
+  } catch {
+    addError.value = 'Рядом не найдено подходящих мест. Попробуйте другое место.'
+  } finally {
+    suggesting.value = false
+  }
+}
+
+async function confirmAdd() {
+  if (!suggestedPOI.value || !route.value) return
+  try {
+    await store.updateRoute(route.value.id, { add_poi_xid: suggestedPOI.value.xid })
+    addPointMode.value = false
+    suggestedPOI.value = null
+  } catch {
+    addError.value = 'Не удалось добавить точку. Попробуйте ещё раз.'
+    suggestedPOI.value = null
+  }
+}
+
+function cancelAdd() {
+  addPointMode.value = false
+  suggestedPOI.value = null
+  addError.value = null
 }
 </script>

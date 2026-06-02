@@ -86,6 +86,11 @@ export const useRoutesStore = defineStore('routes', () => {
     return updateRoute(id, { is_published: false })
   }
 
+  async function suggestWaypoint(routeId: string, lat: number, lon: number): Promise<POI> {
+    const { data } = await client.post<POI>(`/routes/${routeId}/waypoints/suggest`, { tap_lat: lat, tap_lon: lon })
+    return data
+  }
+
   async function fetchPOIDetail(xid: string): Promise<POI> {
     const { data } = await client.get<POI>(`/pois/${xid}`)
     return data
@@ -127,6 +132,7 @@ export const useRoutesStore = defineStore('routes', () => {
     endRoute,
     visitWaypoint,
     rateWaypoint,
+    suggestWaypoint,
     fetchPOIDetail,
     fetchExploreRoutes,
     fetchExploreRoute,

@@ -11,8 +11,10 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.models.poi import POI
 from app.models.route import Route, RouteStatus, RouteWaypoint
 from app.models.user import User
+from app.schemas.poi import POIBasic
 from app.schemas.route import (
     NavigationResponse,
     PublicRouteOut,
@@ -22,16 +24,43 @@ from app.schemas.route import (
     RouteOut,
     RouteSummary,
     RouteUpdateRequest,
+    SuggestWaypointRequest,
     UserRouteSummary,
 )
 from app.services import preferences as pref_svc
+from app.services.opentripmap import OpenTripMapClient
 from app.services.osrm import OSRMClient
 from app.services.route_categories import CATEGORIES, expand
-from app.services.route_generator import generate_route
+from app.services.route_generator import _upsert_pois, generate_route, haversine
 
 router = APIRouter()
 
 _ROUTE_OPTIONS = selectinload(Route.waypoints).selectinload(RouteWaypoint.poi)
+
+
+def _best_insert_idx(
+    poi_lat: float,
+    poi_lon: float,
+    start_lat: float,
+    start_lon: float,
+    sorted_wps: list[RouteWaypoint],
+) -> int:
+    """Best-insertion heuristic: 0-based index minimising extra walking distance."""
+    points = [(start_lat, start_lon)] + [(w.poi.lat, w.poi.lon) for w in sorted_wps]
+    best_idx, best_cost = len(sorted_wps), float("inf")
+    for i in range(1, len(points) + 1):
+        prev = points[i - 1]
+        nxt = points[i] if i < len(points) else None
+        cost = (
+            haversine(prev[0], prev[1], poi_lat, poi_lon)
+            + haversine(poi_lat, poi_lon, nxt[0], nxt[1])
+            - haversine(prev[0], prev[1], nxt[0], nxt[1])
+            if nxt
+            else haversine(prev[0], prev[1], poi_lat, poi_lon)
+        )
+        if cost < best_cost:
+            best_cost, best_idx = cost, i - 1
+    return best_idx
 _ROUTE_WITH_USER = [
     selectinload(Route.waypoints).selectinload(RouteWaypoint.poi),
     selectinload(Route.user),
@@ -241,6 +270,35 @@ async def get_route(
     return await _get_user_route(route_id, user, db)
 
 
+@router.post("/{route_id}/waypoints/suggest", response_model=POIBasic)
+async def suggest_waypoint(
+    route_id: uuid.UUID,
+    body: SuggestWaypointRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    route = await _get_user_route(route_id, user, db)
+    if route.status != RouteStatus.draft:
+        raise HTTPException(status_code=400, detail="Добавление точек доступно только для черновика")
+
+    otm = OpenTripMapClient(request.app.state.http_client)
+    pois = await otm.fetch_radius(body.tap_lat, body.tap_lon, radius_m=500, limit=20)
+
+    existing_xids = {w.poi_xid for w in route.waypoints}
+    candidates = [p for p in pois if p.xid not in existing_xids and p.name and p.lat and p.lon]
+
+    if not candidates:
+        raise HTTPException(status_code=404, detail="Рядом не найдено подходящих мест")
+
+    nearest = min(candidates, key=lambda p: haversine(body.tap_lat, body.tap_lon, p.lat, p.lon))
+    await _upsert_pois(db, [nearest])
+    await db.commit()
+
+    result = await db.execute(select(POI).where(POI.xid == nearest.xid))
+    return result.scalar_one()
+
+
 @router.put("/{route_id}", response_model=RouteOut)
 async def update_route(
     route_id: uuid.UUID,
@@ -284,6 +342,31 @@ async def update_route(
         for idx, xid in enumerate(body.waypoint_order):
             if xid in xid_to_wp:
                 xid_to_wp[xid].order_index = idx
+        needs_reroute = True
+
+    if body.add_poi_xid:
+        if route.status != RouteStatus.draft:
+            raise HTTPException(status_code=400, detail="Добавление точек доступно только для черновика")
+        poi_result = await db.execute(select(POI).where(POI.xid == body.add_poi_xid))
+        new_poi = poi_result.scalar_one_or_none()
+        if new_poi is None:
+            raise HTTPException(status_code=404, detail="Точка не найдена — сначала вызовите suggest")
+        if any(w.poi_xid == body.add_poi_xid for w in route.waypoints):
+            raise HTTPException(status_code=409, detail="Точка уже есть в маршруте")
+        sorted_wps = sorted(route.waypoints, key=lambda w: w.order_index)
+        insert_idx = _best_insert_idx(new_poi.lat, new_poi.lon, route.start_lat, route.start_lon, sorted_wps)
+        for wp in sorted_wps[insert_idx:]:
+            wp.order_index += 1
+        new_wp = RouteWaypoint(
+            route_id=route.id,
+            poi_xid=new_poi.xid,
+            order_index=insert_idx,
+            is_visited=False,
+        )
+        new_wp.poi = new_poi
+        db.add(new_wp)
+        route.waypoints.append(new_wp)
+        await db.flush()
         needs_reroute = True
 
     if needs_reroute:

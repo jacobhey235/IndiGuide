@@ -98,10 +98,16 @@ class RouteGenerateRequest(BaseModel):
     name: str | None = None
 
 
+class SuggestWaypointRequest(BaseModel):
+    tap_lat: float
+    tap_lon: float
+
+
 class RouteUpdateRequest(BaseModel):
     name: str | None = None
     waypoint_order: list[str] | None = None   # poi_xids in desired order
     remove_poi_xids: list[str] | None = None
+    add_poi_xid: str | None = None
     is_saved: bool | None = None
     is_published: bool | None = None
 
