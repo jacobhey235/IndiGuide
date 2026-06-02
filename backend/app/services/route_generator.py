@@ -125,24 +125,37 @@ def _build_best_route(
     num_pois: int,
     selected_kinds: set[str],
     user_prefs: dict[str, float],
+    target_distance_m: float,
 ) -> list[OTMPlace]:
-    """Select exactly num_pois POIs from candidates and find the ordering that
-    maximises 0.5 * linearity + 0.5 * uniformity across all feasible variants."""
+    """Select exactly num_pois POIs from candidates optimising by priority:
+    1) route length within ±1 km of target, 2) preference score, 3) linearity+uniformity."""
     scored = sorted(candidates, key=lambda p: _poi_score(p, selected_kinds, user_prefs), reverse=True)
     pool = scored[:_MAX_COMBO_POOL]
 
     if len(pool) < num_pois:
         return []
 
+    # Cache preference scores to avoid recomputing inside _try
+    poi_pref: dict[int, float] = {id(p): _poi_score(p, selected_kinds, user_prefs) for p in pool}
+
     best_pois: list[OTMPlace] = []
-    best_score = -1.0
+    best_key: tuple[float, float, float] = (-1.0, -1.0, -1.0)
 
     def _try(combo: tuple[OTMPlace, ...] | list[OTMPlace]) -> None:
-        nonlocal best_pois, best_score
+        nonlocal best_pois, best_key
         ordered = sorted(combo, key=lambda p: haversine(start_lat, start_lon, p.lat, p.lon))
-        sc = _route_quality(ordered, start_lat, start_lon)
-        if sc > best_score:
-            best_score = sc
+
+        # Haversine proxy for walking distance
+        pts = [(start_lat, start_lon)] + [(p.lat, p.lon) for p in ordered]
+        estimated_dist = sum(haversine(*pts[i], *pts[i + 1]) for i in range(len(pts) - 1))
+        in_target = 1.0 if abs(estimated_dist - target_distance_m) <= 1000 else 0.0
+
+        avg_pref = sum(poi_pref[id(p)] for p in ordered) / len(ordered)
+        quality = _route_quality(ordered, start_lat, start_lon)
+
+        key = (in_target, avg_pref, quality)
+        if key > best_key:
+            best_key = key
             best_pois = list(ordered)
 
     # Always try the "evenly spaced along distance" baseline
@@ -287,7 +300,7 @@ async def generate_route(
             "Попробуйте увеличить расстояние или изменить категории."
         )
 
-    # 3. Find the most linear and uniformly distributed route of exactly num_pois points
+    # 3. Find the best route of exactly num_pois points (priority: distance fit → prefs → linearity)
     ordered_pois = _build_best_route(
         candidates=candidates,
         start_lat=start_lat,
@@ -295,6 +308,7 @@ async def generate_route(
         num_pois=num_pois,
         selected_kinds=selected_kinds,
         user_prefs=user_prefs,
+        target_distance_m=distance_m,
     )
 
     if len(ordered_pois) != num_pois:

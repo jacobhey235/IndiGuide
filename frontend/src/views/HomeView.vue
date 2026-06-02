@@ -61,20 +61,12 @@
             {{ (generatedRoute.total_distance_m / 1000).toFixed(1) }} км ·
             {{ generatedRoute.waypoints.length }} остановок
           </p>
-          <div class="flex gap-2 mt-3">
-            <button
-              class="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors min-h-[44px]"
-              @click="startWalk"
-            >
-              Начать прогулку
-            </button>
-            <button
-              class="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors min-h-[44px]"
-              @click="$router.push(`/routes/${generatedRoute!.id}`)"
-            >
-              Подробнее
-            </button>
-          </div>
+          <button
+            class="mt-3 w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors min-h-[44px]"
+            @click="startWalk"
+          >
+            Начать прогулку
+          </button>
           <button
             class="mt-2 w-full text-center text-sm text-gray-400 py-1 hover:text-gray-600 transition-colors"
             @click="generatedRoute = null"
@@ -87,7 +79,7 @@
           <div
             v-for="(wp, i) in sortedWaypoints"
             :key="wp.id"
-            class="px-5 py-3 flex items-center gap-3"
+            class="px-5 py-3 flex items-center gap-2"
           >
             <div
               class="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
@@ -100,6 +92,26 @@
               <p v-if="wp.leg_duration_s" class="text-xs text-gray-400">
                 ~{{ Math.round(wp.leg_duration_s / 60) }} мин ходьбы
               </p>
+            </div>
+            <div v-if="generatedRoute.status === 'draft'" class="flex flex-col gap-0.5 flex-shrink-0">
+              <button
+                class="p-1 text-gray-300 hover:text-gray-600 transition-colors disabled:opacity-20"
+                :disabled="i === 0"
+                @click="moveWaypoint(i, 'up')"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                </svg>
+              </button>
+              <button
+                class="p-1 text-gray-300 hover:text-gray-600 transition-colors disabled:opacity-20"
+                :disabled="i === sortedWaypoints.length - 1"
+                @click="moveWaypoint(i, 'down')"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
             </div>
             <button
               v-if="generatedRoute.status === 'draft'"
@@ -210,34 +222,83 @@
         />
 
         <!-- Create tab (mobile): post-generation -->
-        <div v-else-if="generatedRoute" class="px-4 pb-4">
-          <div class="mb-3">
+        <div v-else-if="generatedRoute" class="flex flex-col overflow-hidden min-h-0 flex-1">
+          <div class="px-4 pt-1 pb-3 border-b border-gray-100 flex-shrink-0">
             <p class="font-semibold text-gray-900">{{ generatedRoute.name }}</p>
             <p class="text-sm text-gray-500">
               {{ (generatedRoute.total_distance_m / 1000).toFixed(1) }} км ·
               {{ generatedRoute.waypoints.length }} остановок
             </p>
-          </div>
-          <div class="flex gap-2">
             <button
-              class="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-700 min-h-[48px]"
-              @click="$router.push(`/routes/${generatedRoute!.id}`)"
-            >
-              Детали
-            </button>
-            <button
-              class="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white min-h-[48px]"
+              class="mt-2 w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white min-h-[48px]"
               @click="startWalk"
             >
               Начать прогулку
             </button>
+            <button
+              class="mt-1.5 w-full text-center text-sm text-gray-400 py-1"
+              @click="generatedRoute = null"
+            >
+              Создать новый маршрут
+            </button>
           </div>
-          <button
-            class="mt-2 w-full text-center text-sm text-gray-400 py-1"
-            @click="generatedRoute = null"
-          >
-            Создать новый маршрут
-          </button>
+          <div class="flex-1 overflow-y-auto divide-y divide-gray-50 min-h-0">
+            <div
+              v-for="(wp, i) in sortedWaypoints"
+              :key="wp.id"
+              class="px-4 py-3 flex items-center gap-2"
+            >
+              <div
+                class="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                :class="wp.is_visited ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'"
+              >
+                {{ wp.is_visited ? '✓' : i + 1 }}
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-900 truncate">{{ wp.poi.name }}</p>
+                <p v-if="wp.leg_duration_s" class="text-xs text-gray-400">
+                  ~{{ Math.round(wp.leg_duration_s / 60) }} мин ходьбы
+                </p>
+              </div>
+              <div v-if="generatedRoute.status === 'draft'" class="flex flex-col gap-0.5 flex-shrink-0">
+                <button
+                  class="p-1 text-gray-300 hover:text-gray-600 transition-colors disabled:opacity-20"
+                  :disabled="i === 0"
+                  @click="moveWaypoint(i, 'up')"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                  </svg>
+                </button>
+                <button
+                  class="p-1 text-gray-300 hover:text-gray-600 transition-colors disabled:opacity-20"
+                  :disabled="i === sortedWaypoints.length - 1"
+                  @click="moveWaypoint(i, 'down')"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+              </div>
+              <button
+                v-if="generatedRoute.status === 'draft'"
+                class="p-1.5 text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"
+                title="Удалить"
+                @click="removeWaypoint(wp.poi.xid)"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+              <button
+                v-if="generatedRoute.status === 'active' && !wp.is_visited"
+                class="text-xs font-medium text-blue-600 bg-blue-50 rounded-lg px-2 py-1 flex-shrink-0 hover:bg-blue-100 transition-colors"
+                @click="markVisited(wp.id)"
+              >
+                Посещено
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Create tab (mobile): route form -->
@@ -427,6 +488,22 @@ async function startWalk() {
   if (!generatedRoute.value) return
   await routesStore.startRoute(generatedRoute.value.id)
   router.push(`/routes/${generatedRoute.value.id}/walk`)
+}
+
+async function moveWaypoint(index: number, direction: 'up' | 'down') {
+  if (!generatedRoute.value) return
+  const wps = sortedWaypoints.value
+  const swap = direction === 'up' ? index - 1 : index + 1
+  if (swap < 0 || swap >= wps.length) return
+  const order = wps.map((w) => w.poi_xid)
+  ;[order[index], order[swap]] = [order[swap], order[index]]
+  try {
+    const updated = await routesStore.updateRoute(generatedRoute.value.id, { waypoint_order: order })
+    if (updated) generatedRoute.value = updated
+  } catch {
+    errorMsg.value = 'Не удалось изменить порядок'
+    setTimeout(() => { errorMsg.value = '' }, 3000)
+  }
 }
 
 async function removeWaypoint(poiXid: string) {
