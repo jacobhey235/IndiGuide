@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import math
-import random
 from datetime import datetime, timezone
-from itertools import combinations
 
 import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -18,9 +16,12 @@ from app.services.preferences import get_preference_map
 from app.services.route_categories import CATEGORIES
 from app.services.route_categories import expand as expand_categories
 
-_MAX_COMBO_POOL = 25       # top-N candidates by quality score fed into combination search
-_MAX_COMBINATIONS = 3000   # max route variants to evaluate
-_OTM_LIMIT = 500           # OpenTripMap API hard limit
+_OTM_LIMIT = 500              # OpenTripMap API hard limit
+_WALKING_FACTOR = 1.3         # real walking distance ≈ 1.3× straight-line haversine
+_ENDPOINT_RING_HALF_M = 1000  # half-width of the endpoint ring (~2 km window) around r_target
+_CORRIDOR_HALF_M = 400        # base perpendicular half-width of the start→end corridor (m)
+_MAX_ENDPOINTS = 60           # cap on endpoint candidates evaluated
+_DISTANCE_TOLERANCE_FRAC = 0.2  # accept routes whose estimated length is within ±20% of target
 
 
 def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -77,7 +78,7 @@ def _uniformity(start_lat: float, start_lon: float, pts: list[tuple[float, float
 
 def _route_quality(ordered_pois: list[OTMPlace], start_lat: float, start_lon: float) -> float:
     pts = [(p.lat, p.lon) for p in ordered_pois]
-    return 0.5 * _linearity(start_lat, start_lon, pts) + 0.5 * _uniformity(start_lat, start_lon, pts)
+    return 0.7 * _linearity(start_lat, start_lon, pts) + 0.3 * _uniformity(start_lat, start_lon, pts)
 
 
 def _assign_sectors(
@@ -90,35 +91,158 @@ def _assign_sectors(
     return sectors
 
 
-def _select_candidates(
+def _to_local_xy(lat: float, lon: float, lat0: float, lon0: float) -> tuple[float, float]:
+    """Equirectangular projection to local metres (x=east, y=north) relative to (lat0, lon0).
+    Accurate at city scale (a few km)."""
+    R = 6_371_000
+    x = math.radians(lon - lon0) * math.cos(math.radians(lat0)) * R
+    y = math.radians(lat - lat0) * R
+    return x, y
+
+
+def _select_endpoints(
     pois: list[OTMPlace],
     start_lat: float,
     start_lon: float,
+    r_target: float,
+    selected_kinds: set[str],
+    user_prefs: dict[str, float],
+) -> list[OTMPlace]:
+    """Endpoint candidates: POIs whose straight-line distance from start lies in a ring
+    centred on r_target. The endpoint fixes both the direction and the length of the route.
+    The ring is widened (relaxation) until at least one candidate appears."""
+    with_dist = [(p, haversine(start_lat, start_lon, p.lat, p.lon)) for p in pois]
+    if not with_dist:
+        return []
+    max_dist = max(d for _, d in with_dist)
+
+    h = min(_ENDPOINT_RING_HALF_M, 0.6 * r_target)
+    ring: list[OTMPlace] = []
+    while not ring:
+        lo, hi = r_target - h, r_target + h
+        ring = [p for p, d in with_dist if lo <= d <= hi]
+        if ring or h >= r_target + max_dist:  # found, or ring already spans every POI
+            break
+        h += _ENDPOINT_RING_HALF_M
+
+    ring.sort(key=lambda p: _poi_score(p, selected_kinds, user_prefs), reverse=True)
+    return ring[:_MAX_ENDPOINTS]
+
+
+def _build_corridor_route(
+    pool: list[OTMPlace],
+    start_lat: float,
+    start_lon: float,
+    end: OTMPlace,
+    num_pois: int,
+    selected_kinds: set[str],
+    user_prefs: dict[str, float],
+) -> list[OTMPlace]:
+    """Lay out exactly num_pois POIs (end being the last) along the start→end axis so the
+    path is linear and evenly spaced. Intermediate points are chosen one per equal-length
+    slot of the axis, preferring points close to the line with a high POI score. Returns the
+    ordered route start→…→end, or [] when num_pois cannot be filled even after relaxing."""
+    ex, ey = _to_local_xy(end.lat, end.lon, start_lat, start_lon)
+    seg_len2 = ex * ex + ey * ey
+    if seg_len2 <= 0:
+        return []
+    seg_len = math.sqrt(seg_len2)
+
+    # Project every candidate onto the axis: t = progress fraction, perp = offset in metres.
+    projected: list[tuple[OTMPlace, float, float]] = []
+    for p in pool:
+        if p.xid == end.xid:
+            continue
+        px, py = _to_local_xy(p.lat, p.lon, start_lat, start_lon)
+        t = (px * ex + py * ey) / seg_len2
+        perp = abs(px * ey - py * ex) / seg_len
+        projected.append((p, t, perp))
+
+    n_intermediate = num_pois - 1
+    if n_intermediate <= 0:
+        return [end]
+
+    selected: list[tuple[OTMPlace, float]] = []
+    used: set[int] = set()
+    for slot in range(n_intermediate):
+        lo = slot / num_pois
+        hi = (slot + 1) / num_pois
+        corridor_half = _CORRIDOR_HALF_M
+        t_pad = 0.0
+        window: list[tuple[int, OTMPlace, float, float]] = []
+        while not window:
+            window = [
+                (i, p, t, perp)
+                for i, (p, t, perp) in enumerate(projected)
+                if i not in used
+                and 0.0 <= t <= 1.0
+                and (lo - t_pad) <= t <= (hi + t_pad)
+                and perp <= corridor_half
+            ]
+            if window:
+                break
+            # Relaxation: widen the slot window along the axis and the corridor width.
+            t_pad += 0.5 / num_pois
+            corridor_half += _CORRIDOR_HALF_M
+            if t_pad >= 1.0 and corridor_half >= seg_len:
+                break
+        if not window:
+            continue
+        best = max(
+            window,
+            key=lambda w: _poi_score(w[1], selected_kinds, user_prefs)
+            - 0.5 * (w[3] / max(corridor_half, 1.0)),
+        )
+        selected.append((best[1], best[2]))
+        used.add(best[0])
+
+    if len(selected) < n_intermediate:
+        return []
+
+    selected.sort(key=lambda x: x[1])
+    return [p for p, _ in selected] + [end]
+
+
+def _fallback_even_sample(
+    candidates: list[OTMPlace],
+    start_lat: float,
+    start_lon: float,
+    endpoints: list[OTMPlace],
     num_pois: int,
 ) -> list[OTMPlace]:
-    """Return candidates by progressively widening the arc: 60° → 120° → 180°."""
-    sectors = _assign_sectors(pois, start_lat, start_lon)
-    best_sec = max(range(6), key=lambda s: len(sectors[s]))
+    """Last-resort guarantee of exactly num_pois points: project all candidates onto the
+    axis of the endpoint that captures the most of them, then sample num_pois evenly by
+    progress. Returns [] only when fewer than num_pois candidates exist in total."""
+    if len(candidates) < num_pois:
+        return []
 
-    # 60° — best sector alone
-    candidates = list(sectors[best_sec])
-    if len(candidates) >= num_pois:
-        return candidates
+    best_proj: list[tuple[OTMPlace, float]] | None = None
+    best_count = -1
+    for end in endpoints:
+        ex, ey = _to_local_xy(end.lat, end.lon, start_lat, start_lon)
+        seg_len2 = ex * ex + ey * ey
+        if seg_len2 <= 0:
+            continue
+        proj = [
+            (p, (lambda xy: (xy[0] * ex + xy[1] * ey) / seg_len2)(
+                _to_local_xy(p.lat, p.lon, start_lat, start_lon)))
+            for p in candidates
+        ]
+        count = sum(1 for _, t in proj if 0.0 <= t <= 1.2)
+        if count > best_count:
+            best_count = count
+            best_proj = proj
 
-    # 120° — add the adjacent sector with more POIs
-    left_sec = (best_sec - 1) % 6
-    right_sec = (best_sec + 1) % 6
-    extra_sec = left_sec if len(sectors[left_sec]) >= len(sectors[right_sec]) else right_sec
-    candidates = list(sectors[best_sec]) + list(sectors[extra_sec])
-    if len(candidates) >= num_pois:
-        return candidates
+    if best_proj is not None:
+        ordered = [p for p, _ in sorted(best_proj, key=lambda x: x[1])]
+    else:
+        ordered = sorted(candidates, key=lambda p: haversine(start_lat, start_lon, p.lat, p.lon))
 
-    # 180° — add the remaining adjacent sector
-    other_sec = right_sec if extra_sec == left_sec else left_sec
-    return list(sectors[best_sec]) + list(sectors[extra_sec]) + list(sectors[other_sec])
+    step = len(ordered) / num_pois
+    return [ordered[min(int(i * step), len(ordered) - 1)] for i in range(num_pois)]
 
 
-def _build_best_route(
+def _build_best_route_v2(
     candidates: list[OTMPlace],
     start_lat: float,
     start_lon: float,
@@ -127,62 +251,51 @@ def _build_best_route(
     user_prefs: dict[str, float],
     target_distance_m: float,
 ) -> list[OTMPlace]:
-    """Select exactly num_pois POIs from candidates optimising by priority:
-    1) route length within ±1 km of target, 2) preference score, 3) linearity+uniformity."""
-    scored = sorted(candidates, key=lambda p: _poi_score(p, selected_kinds, user_prefs), reverse=True)
-    pool = scored[:_MAX_COMBO_POOL]
-
-    if len(pool) < num_pois:
+    """Pick an endpoint from the outer ring, build a linear corridor route to it, and keep
+    the most linear + uniform variant whose estimated length is within ±tolerance of the
+    target. Always returns exactly num_pois points unless the area physically holds fewer."""
+    r_target = target_distance_m / _WALKING_FACTOR
+    endpoints = _select_endpoints(
+        candidates, start_lat, start_lon, r_target, selected_kinds, user_prefs
+    )
+    if not endpoints:
         return []
 
-    # Cache preference scores to avoid recomputing inside _try
-    poi_pref: dict[int, float] = {id(p): _poi_score(p, selected_kinds, user_prefs) for p in pool}
+    tol = _DISTANCE_TOLERANCE_FRAC * target_distance_m
+    best_in_range: list[OTMPlace] = []
+    best_quality: float = -1.0
+    fallback: list[OTMPlace] = []
+    fallback_err: float = float("inf")
 
-    best_pois: list[OTMPlace] = []
-    best_key: tuple[float, float, float] = (-1.0, -1.0, -1.0)
+    for end in endpoints:
+        route = _build_corridor_route(
+            candidates, start_lat, start_lon, end, num_pois, selected_kinds, user_prefs
+        )
+        if len(route) != num_pois:
+            continue
+        pts = [(p.lat, p.lon) for p in route]
+        path = [(start_lat, start_lon), *pts]
+        estimated_dist = (
+            sum(haversine(*path[i], *path[i + 1]) for i in range(len(path) - 1))
+            * _WALKING_FACTOR
+        )
+        quality = 0.5 * _linearity(start_lat, start_lon, pts) + 0.5 * _uniformity(
+            start_lat, start_lon, pts
+        )
+        err = abs(estimated_dist - target_distance_m)
+        if err <= tol and quality > best_quality:
+            best_quality = quality
+            best_in_range = route
+        if err < fallback_err:
+            fallback_err = err
+            fallback = route
 
-    def _try(combo: tuple[OTMPlace, ...] | list[OTMPlace]) -> None:
-        nonlocal best_pois, best_key
-        ordered = sorted(combo, key=lambda p: haversine(start_lat, start_lon, p.lat, p.lon))
+    result = best_in_range or fallback
+    if len(result) == num_pois:
+        return result
 
-        # Haversine proxy for walking distance
-        pts = [(start_lat, start_lon)] + [(p.lat, p.lon) for p in ordered]
-        estimated_dist = sum(haversine(*pts[i], *pts[i + 1]) for i in range(len(pts) - 1))
-        in_target = 1.0 if abs(estimated_dist - target_distance_m) <= 1000 else 0.0
-
-        avg_pref = sum(poi_pref[id(p)] for p in ordered) / len(ordered)
-        quality = _route_quality(ordered, start_lat, start_lon)
-
-        key = (in_target, avg_pref, quality)
-        if key > best_key:
-            best_key = key
-            best_pois = list(ordered)
-
-    # Always try the "evenly spaced along distance" baseline
-    sorted_pool = sorted(pool, key=lambda p: haversine(start_lat, start_lon, p.lat, p.lon))
-    if len(sorted_pool) >= num_pois:
-        step = len(sorted_pool) / num_pois
-        baseline = [sorted_pool[int(i * step)] for i in range(num_pois)]
-        _try(baseline)
-
-    total_combos = math.comb(len(pool), num_pois)
-
-    if total_combos <= _MAX_COMBINATIONS:
-        for combo in combinations(pool, num_pois):
-            _try(combo)
-    else:
-        seen: set[tuple[int, ...]] = set()
-        pool_indices = list(range(len(pool)))
-        attempts = 0
-        max_attempts = _MAX_COMBINATIONS * 4
-        while len(seen) < _MAX_COMBINATIONS and attempts < max_attempts:
-            idxs = tuple(sorted(random.sample(pool_indices, num_pois)))
-            if idxs not in seen:
-                seen.add(idxs)
-                _try([pool[i] for i in idxs])
-            attempts += 1
-
-    return best_pois
+    # Count guarantee: no endpoint yielded a full corridor route → even-sample instead.
+    return _fallback_even_sample(candidates, start_lat, start_lon, endpoints, num_pois)
 
 
 async def _fetch_pois_for_preferences(
@@ -194,7 +307,7 @@ async def _fetch_pois_for_preferences(
     num_pois: int,
 ) -> list[OTMPlace]:
     """Fetch with progressively more categories (top-1/3 → top-2/3 → all) until the
-    best 60° sector has at least num_pois candidates, or we've exhausted all options."""
+    densest 60° sector has at least num_pois candidates, or we've exhausted all options."""
     cat_scores = sorted(
         (
             (key, sum(user_prefs.get(k, 0.5) for k in kinds) / len(kinds))
@@ -267,7 +380,8 @@ async def generate_route(
     is_explicit = bool(selected_categories)
 
     otm = OpenTripMapClient(http_client)
-    fetch_radius = int(distance_m) + 1000
+    # Search all tourist POIs within (route length + 1 km) of the start point.
+    fetch_radius = max(int(distance_m + 1000), 500)
 
     # 1. Fetch POIs in (distance + 1 km) radius
     if is_explicit:
@@ -291,18 +405,17 @@ async def generate_route(
             "Попробуйте увеличить расстояние или изменить категории."
         )
 
-    # 2. Select candidates: best 60° sector, expanding to 120° / 180° if needed
-    candidates = _select_candidates(pois, start_lat, start_lon, num_pois)
-
-    if len(candidates) < num_pois:
+    if len(pois) < num_pois:
         raise ValueError(
             "Недостаточно объектов для построения маршрута. "
             "Попробуйте увеличить расстояние или изменить категории."
         )
 
-    # 3. Find the best route of exactly num_pois points (priority: distance fit → prefs → linearity)
-    ordered_pois = _build_best_route(
-        candidates=candidates,
+    # 2. Pick an endpoint from the outer ring (r_target = distance / walking factor) that
+    #    sets the route's direction and length, then lay out a linear, evenly spaced
+    #    corridor of exactly num_pois points toward it.
+    ordered_pois = _build_best_route_v2(
+        candidates=pois,
         start_lat=start_lat,
         start_lon=start_lon,
         num_pois=num_pois,
