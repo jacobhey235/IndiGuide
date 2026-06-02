@@ -35,11 +35,11 @@
         </div>
         <input
           v-model.number="form.num_pois"
-          type="range" min="2" max="10" step="1"
+          type="range" min="2" :max="maxPois" step="1"
           class="w-full accent-blue-600"
         />
         <div class="mt-1 flex justify-between text-xs text-gray-400">
-          <span>2</span><span>10</span>
+          <span>2</span><span>{{ maxPois }}</span>
         </div>
       </div>
 
@@ -106,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 import { CATEGORIES } from '@/constants/categories'
 
 const props = defineProps<{
@@ -120,6 +120,12 @@ const emit = defineEmits<{
 }>()
 
 const form = reactive({ distance_m: 3000, num_pois: 4 })
+
+const maxPois = computed(() => Math.max(2, Math.min(10, Math.floor(form.distance_m / 750))))
+
+watch(maxPois, (max) => {
+  if (form.num_pois > max) form.num_pois = max
+})
 const usePrefs = ref(true)
 const selected = ref<Set<string>>(new Set(['historic', 'architecture']))
 
