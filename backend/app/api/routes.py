@@ -27,6 +27,7 @@ from app.schemas.route import (
     UserRouteSummary,
 )
 from app.services import preferences as pref_svc
+from app.services.opening_hours import check_open
 from app.services.opentripmap import OpenTripMapClient
 from app.services.osrm import OSRMClient
 from app.services.route_categories import CATEGORIES, expand
@@ -235,6 +236,8 @@ async def generate(
             selected_categories=body.selected_categories,
             name=body.name,
             include_disliked=body.include_disliked,
+            filter_open_now=body.filter_open_now,
+            client_utc_offset=body.client_utc_offset,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -244,7 +247,11 @@ async def generate(
     result = await db.execute(
         select(Route).options(_ROUTE_OPTIONS).where(Route.id == route.id)
     )
-    return result.scalar_one()
+    response = RouteOut.model_validate(result.scalar_one())
+    for wp in response.waypoints:
+        if wp.poi.opening_hours:
+            wp.is_open = check_open(wp.poi.opening_hours, body.client_utc_offset)
+    return response
 
 
 @router.get("/", response_model=list[UserRouteSummary])
@@ -264,10 +271,16 @@ async def list_routes(
 @router.get("/{route_id}", response_model=RouteOut)
 async def get_route(
     route_id: uuid.UUID,
+    client_utc_offset: int = Query(default=0),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    return await _get_user_route(route_id, user, db)
+    route = await _get_user_route(route_id, user, db)
+    response = RouteOut.model_validate(route)
+    for wp in response.waypoints:
+        if wp.poi.opening_hours:
+            wp.is_open = check_open(wp.poi.opening_hours, client_utc_offset)
+    return response
 
 
 @router.post("/{route_id}/waypoints/suggest", response_model=POIBasic)

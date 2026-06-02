@@ -16,9 +16,19 @@
 
     <div class="flex-1 min-w-0">
       <p class="font-medium text-gray-900 truncate">{{ waypoint.poi.name }}</p>
-      <p class="text-xs text-gray-400 truncate">
-        {{ kindLabel }}
-      </p>
+      <div class="flex items-center gap-1.5 mt-0.5">
+        <p class="text-xs text-gray-400 truncate">{{ kindLabel }}</p>
+        <template v-if="showOpeningHours !== false">
+          <span
+            v-if="waypoint.is_open === true"
+            class="flex-shrink-0 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700"
+          >Открыто</span>
+          <span
+            v-else-if="waypoint.is_open === false"
+            class="flex-shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
+          >Закрыто</span>
+        </template>
+      </div>
     </div>
 
     <!-- Walk time from previous -->
@@ -48,6 +58,7 @@ const props = defineProps<{
   index: number
   isLast: boolean
   editMode: boolean
+  showOpeningHours?: boolean
 }>()
 
 defineEmits<{ tap: []; 'move-up': []; 'move-down': []; remove: [] }>()

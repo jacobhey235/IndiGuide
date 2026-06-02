@@ -24,6 +24,18 @@
           </p>
         </div>
         <button
+          v-if="hasOpeningHours"
+          class="flex-shrink-0 rounded-full p-2 transition-colors"
+          :class="showOpeningHours ? 'text-blue-600' : 'text-gray-300'"
+          :title="showOpeningHours ? 'Скрыть часы работы' : 'Показать часы работы'"
+          @click="showOpeningHours = !showOpeningHours"
+        >
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </button>
+        <button
           v-if="route?.status === 'draft'"
           class="text-sm font-medium"
           :class="editMode ? 'text-blue-600' : 'text-gray-500'"
@@ -97,7 +109,8 @@
           :index="i"
           :is-last="i === (route?.waypoints.length ?? 0) - 1"
           :edit-mode="editMode"
-          @tap="selectedPOI = wp.poi"
+          :show-opening-hours="showOpeningHours"
+          @tap="() => { selectedPOI = wp.poi; selectedIsOpen = wp.is_open ?? null }"
           @move-up="moveWaypoint(i, 'up')"
           @move-down="moveWaypoint(i, 'down')"
           @remove="removeWaypoint(wp.poi_xid)"
@@ -196,7 +209,7 @@
       </div>
     </div>
 
-    <POIModal v-if="selectedPOI" :poi="selectedPOI" @close="selectedPOI = null" />
+    <POIModal v-if="selectedPOI" :poi="selectedPOI" :is-open="selectedIsOpen" @close="selectedPOI = null" />
   </div>
 </template>
 
@@ -216,13 +229,19 @@ const store = useRoutesStore()
 const editMode = ref(false)
 const saving = ref(false)
 const publishing = ref(false)
+const showOpeningHours = ref(true)
 const selectedPOI = ref<POI | null>(null)
+const selectedIsOpen = ref<boolean | null>(null)
 const addPointMode = ref(false)
 const suggesting = ref(false)
 const suggestedPOI = ref<POI | null>(null)
 const addError = ref<string | null>(null)
 
 const route = computed(() => store.currentRoute)
+
+const hasOpeningHours = computed(() =>
+  route.value?.waypoints.some((wp) => wp.is_open !== null) ?? false,
+)
 
 const statusColor = computed(() => ({
   draft: 'text-gray-500',

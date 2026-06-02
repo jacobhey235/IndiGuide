@@ -33,6 +33,25 @@
             </span>
           </div>
 
+          <!-- Opening hours -->
+          <div v-if="openingHours" class="mb-3 flex items-start gap-1.5 text-sm text-gray-500">
+            <svg class="h-4 w-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div>
+              <span>{{ openingHours }}</span>
+              <span
+                v-if="isOpen === true"
+                class="ml-2 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700"
+              >Открыто</span>
+              <span
+                v-else-if="isOpen === false"
+                class="ml-2 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
+              >Закрыто</span>
+            </div>
+          </div>
+
           <!-- Address -->
           <p v-if="poi.address" class="mb-3 flex items-center gap-1.5 text-sm text-gray-500">
             <svg class="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,7 +87,7 @@ import { useRoutesStore } from '@/stores/routes'
 import type { POI } from '@/types'
 import { translateKind } from '@/constants/kindTranslations'
 
-const props = defineProps<{ poi: POI }>()
+const props = defineProps<{ poi: POI; isOpen?: boolean | null }>()
 defineEmits<{ close: [] }>()
 
 const store = useRoutesStore()
@@ -82,6 +101,9 @@ const kindsList = computed(() =>
     .filter(Boolean)
     .slice(0, 5),
 )
+
+const openingHours = computed(() => detail.value?.opening_hours || props.poi.opening_hours || null)
+const isOpen = computed(() => props.isOpen ?? null)
 
 onMounted(async () => {
   if (props.poi.wikipedia_excerpt) {

@@ -78,7 +78,7 @@
             Остановка {{ nextIndex + 1 }} из {{ totalCount }}
           </p>
 
-          <div class="mt-2 flex flex-wrap gap-1">
+          <div class="mt-2 flex flex-wrap items-center gap-1">
             <span
               v-for="kind in kindsList"
               :key="kind"
@@ -86,6 +86,14 @@
             >
               {{ kind }}
             </span>
+            <span
+              v-if="nextWaypoint.is_open === true"
+              class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700"
+            >Открыто</span>
+            <span
+              v-else-if="nextWaypoint.is_open === false"
+              class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
+            >Закрыто</span>
           </div>
         </div>
 
@@ -130,7 +138,7 @@
         <button
           v-if="nextWaypoint && nextPoiHasExcerpt"
           class="mt-2 w-full text-center text-sm text-blue-600 py-1"
-          @click="selectedPOI = nextWaypoint!.poi"
+          @click="() => { selectedPOI = nextWaypoint!.poi; selectedIsOpen = nextWaypoint!.is_open ?? null }"
         >
           Об этом месте
         </button>
@@ -151,7 +159,7 @@
       </div>
     </Teleport>
 
-    <POIModal v-if="selectedPOI" :poi="selectedPOI" @close="selectedPOI = null" />
+    <POIModal v-if="selectedPOI" :poi="selectedPOI" :is-open="selectedIsOpen" @close="selectedPOI = null" />
   </div>
 </template>
 
@@ -173,6 +181,7 @@ const marking = ref(false)
 const finishing = ref(false)
 const showEndConfirm = ref(false)
 const selectedPOI = ref<POI | null>(null)
+const selectedIsOpen = ref<boolean | null>(null)
 const mapRef = ref<InstanceType<typeof AppMap> | null>(null)
 
 const nextPoiHasExcerpt = ref<boolean | null>(null)

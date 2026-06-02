@@ -26,7 +26,8 @@ export const useRoutesStore = defineStore('routes', () => {
   }
 
   async function fetchRoute(id: string): Promise<Route> {
-    const { data } = await client.get<Route>(`/routes/${id}`)
+    const utcOffset = -new Date().getTimezoneOffset()
+    const { data } = await client.get<Route>(`/routes/${id}`, { params: { client_utc_offset: utcOffset } })
     currentRoute.value = data
     return data
   }

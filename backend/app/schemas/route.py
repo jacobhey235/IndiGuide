@@ -17,6 +17,7 @@ class WaypointOut(BaseModel):
     visited_at: datetime | None
     leg_duration_s: int | None
     poi: POIBasic
+    is_open: bool | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,6 +98,8 @@ class RouteGenerateRequest(BaseModel):
     selected_categories: list[str] | None = Field(default=None, max_length=7)
     name: str | None = None
     include_disliked: bool = False
+    filter_open_now: bool = False
+    client_utc_offset: int = 0
 
 
 class SuggestWaypointRequest(BaseModel):

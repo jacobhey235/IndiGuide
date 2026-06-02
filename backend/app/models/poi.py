@@ -18,6 +18,7 @@ class POI(Base):
     wikipedia_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    opening_hours: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

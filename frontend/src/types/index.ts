@@ -17,6 +17,7 @@ export interface POI {
   wikipedia_excerpt?: string | null
   image_url?: string | null
   address?: string | null
+  opening_hours?: string | null
 }
 
 export interface Waypoint {
@@ -27,6 +28,7 @@ export interface Waypoint {
   visited_at?: string | null
   leg_duration_s?: number | null
   poi: POI
+  is_open?: boolean | null
 }
 
 export interface Route {
@@ -71,6 +73,8 @@ export interface GenerateRouteRequest {
   selected_categories?: string[]
   name?: string
   include_disliked?: boolean
+  filter_open_now?: boolean
+  client_utc_offset?: number
 }
 
 export interface RouteUpdateRequest {

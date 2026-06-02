@@ -8,10 +8,14 @@ import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import update
+
 from app.models.poi import POI
 from app.models.route import Route, RouteStatus, RouteWaypoint
 from app.models.user import User
+from app.services.opening_hours import check_open
 from app.services.opentripmap import OTMPlace, OpenTripMapClient
+from app.services.osm import fetch_opening_hours
 from app.services.osrm import OSRMClient
 from app.services.preferences import get_disliked_poi_xids, get_preference_map
 from app.services.route_categories import CATEGORIES
@@ -408,6 +412,39 @@ async def _upsert_pois(db: AsyncSession, pois: list[OTMPlace]) -> None:
         await db.execute(stmt)
 
 
+async def _get_opening_hours_map(
+    pois: list[OTMPlace],
+    db: AsyncSession,
+    http_client: httpx.AsyncClient,
+) -> dict[str, str | None]:
+    """Read opening_hours from DB cache or fetch from OSM API. Does NOT write to DB."""
+    result: dict[str, str | None] = {}
+    to_fetch: list[OTMPlace] = []
+
+    for poi in pois:
+        db_poi = await db.get(POI, poi.xid)
+        if db_poi is not None and db_poi.opening_hours is not None:
+            result[poi.xid] = db_poi.opening_hours
+        else:
+            to_fetch.append(poi)
+
+    if to_fetch:
+        fetched = await asyncio.gather(
+            *[fetch_opening_hours(p.xid, http_client) for p in to_fetch]
+        )
+        for poi, oh in zip(to_fetch, fetched):
+            result[poi.xid] = oh
+
+    return result
+
+
+async def _store_opening_hours(oh_map: dict[str, str | None], db: AsyncSession) -> None:
+    """Write opening_hours to already-existing POI rows (call after _upsert_pois)."""
+    for xid, oh in oh_map.items():
+        if oh is not None:
+            await db.execute(update(POI).where(POI.xid == xid).values(opening_hours=oh))
+
+
 async def generate_route(
     db: AsyncSession,
     http_client: httpx.AsyncClient,
@@ -419,6 +456,8 @@ async def generate_route(
     selected_categories: list[str] | None,
     name: str | None,
     include_disliked: bool = False,
+    filter_open_now: bool = False,
+    client_utc_offset: int = 0,
 ) -> Route:
     user_prefs = await get_preference_map(db, user.id)
     disliked_xids = set() if include_disliked else await get_disliked_poi_xids(db, user.id)
@@ -477,6 +516,31 @@ async def generate_route(
             "Попробуйте увеличить расстояние или изменить категории."
         )
 
+    # 3b. Filter out closed POIs if requested (one rebuild attempt)
+    oh_map: dict[str, str | None] = {}
+    if filter_open_now:
+        oh_map = await _get_opening_hours_map(ordered_pois, db, http_client)
+        closed_xids = {
+            xid for xid, oh in oh_map.items() if oh and not check_open(oh, client_utc_offset)
+        }
+        if closed_xids:
+            rebuild_pool = [p for p in pois if p.xid not in disliked_xids | closed_xids]
+            rebuilt = _build_best_route_v2(
+                candidates=rebuild_pool,
+                start_lat=start_lat,
+                start_lon=start_lon,
+                num_pois=num_pois,
+                selected_kinds=selected_kinds,
+                user_prefs=user_prefs,
+                target_distance_m=distance_m,
+            )
+            if len(rebuilt) == num_pois:
+                new_pois = [p for p in rebuilt if p.xid not in oh_map]
+                if new_pois:
+                    extra = await _get_opening_hours_map(new_pois, db, http_client)
+                    oh_map.update(extra)
+                ordered_pois = rebuilt
+
     # 4. Build walking route via OSRM
     waypoints = [(start_lat, start_lon)] + [(p.lat, p.lon) for p in ordered_pois]
     osrm = OSRMClient(http_client)
@@ -490,6 +554,8 @@ async def generate_route(
         )
 
     await _upsert_pois(db, ordered_pois)
+    if oh_map:
+        await _store_opening_hours(oh_map, db)
     await db.commit()
 
     route_name = name or f"Маршрут от {datetime.now(timezone.utc).strftime('%d.%m')}"

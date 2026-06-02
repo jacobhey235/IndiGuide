@@ -9,6 +9,7 @@ from app.models.poi import POI
 from app.models.user import User
 from app.schemas.poi import POIDetail
 from app.services.opentripmap import OpenTripMapClient
+from app.services.osm import fetch_opening_hours
 
 router = APIRouter()
 
@@ -51,6 +52,10 @@ async def get_poi(
     poi.image_url = detail.image_url
     poi.address = detail.address
     poi.last_fetched_at = now
+
+    if poi.opening_hours is None:
+        oh = await fetch_opening_hours(xid, request.app.state.http_client)
+        poi.opening_hours = oh
 
     await db.commit()
     await db.refresh(poi)
