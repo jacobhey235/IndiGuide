@@ -24,6 +24,7 @@
             {{ auth.isAuthenticated() ? 'Выйти' : 'Войти' }}
           </button>
         </div>
+        <CityPicker @select="onCitySelect" />
       </div>
 
       <!-- Tab switcher -->
@@ -226,6 +227,7 @@
           {{ auth.isAuthenticated() ? 'Выйти' : 'Войти' }}
         </button>
       </div>
+      <CityPicker @select="onCitySelect" />
     </div>
 
     <!-- Mobile bottom drawer (hidden on desktop) -->
@@ -441,6 +443,7 @@ import AppMap from '@/components/AppMap.vue'
 import RouteForm from '@/components/RouteForm.vue'
 import AuthModal from '@/components/AuthModal.vue'
 import PublicRoutesFeed from '@/components/PublicRoutesFeed.vue'
+import CityPicker from '@/components/CityPicker.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRoutesStore } from '@/stores/routes'
 import type { Route, POI } from '@/types'
@@ -564,6 +567,12 @@ function onDrawerTransitionEnd() {
   mapRef.value?.fitViewport()
 }
 // ──────────────────────────────────────────────────────────────────────────
+
+function onCitySelect(lat: number, lon: number) {
+  startLat.value = null
+  startLon.value = null
+  mapRef.value?.panTo(lat, lon, 12)
+}
 
 function onPointSelected(lat: number, lon: number) {
   if (generatedRoute.value && addPointMode.value) {

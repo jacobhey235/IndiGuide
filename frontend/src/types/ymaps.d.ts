@@ -74,6 +74,21 @@ declare namespace ymaps {
     constructor(geometry: [number, number][], properties?: object, options?: PolylineOptions)
     events: EventManager
   }
+
+  interface GeoObjectList {
+    toArray(): GeoObject[]
+  }
+
+  interface GeocodeResult {
+    geoObjects: GeoObjectList
+  }
+
+  interface GeocodeOptions {
+    results?: number
+    kind?: string
+  }
+
+  function geocode(request: string, options?: GeocodeOptions): Promise<GeocodeResult>
 }
 
 declare const ymaps: typeof ymaps & { ready: () => Promise<void> }
