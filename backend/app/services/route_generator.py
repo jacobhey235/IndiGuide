@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import math
 from datetime import datetime, timezone
 
@@ -18,7 +19,8 @@ from app.services.route_categories import expand as expand_categories
 
 _OTM_LIMIT = 500              # OpenTripMap API hard limit
 _WALKING_FACTOR = 1.3         # real walking distance ≈ 1.3× straight-line haversine
-_ENDPOINT_RING_HALF_M = 1000  # half-width of the endpoint ring (~2 km window) around r_target
+_ENDPOINT_RING_INIT_FRAC = 0.10   # initial half-width of endpoint ring as fraction of target distance
+_ENDPOINT_RING_STEP_FRAC = 0.05   # expansion step when ring is empty (→ 15%, 20%, …)
 _CORRIDOR_HALF_M = 400        # base perpendicular half-width of the start→end corridor (m)
 _MAX_ENDPOINTS = 60           # cap on endpoint candidates evaluated
 _DISTANCE_TOLERANCE_FRAC = 0.2  # accept routes whose estimated length is within ±20% of target
@@ -116,14 +118,16 @@ def _select_endpoints(
         return []
     max_dist = max(d for _, d in with_dist)
 
-    h = min(_ENDPOINT_RING_HALF_M, 0.6 * r_target)
+    target_m = r_target * _WALKING_FACTOR  # user-specified walking distance
+    h_step = _ENDPOINT_RING_INIT_FRAC * target_m
+    h = min(h_step, 0.6 * r_target)
     ring: list[OTMPlace] = []
     while not ring:
         lo, hi = r_target - h, r_target + h
         ring = [p for p, d in with_dist if lo <= d <= hi]
         if ring or h >= r_target + max_dist:  # found, or ring already spans every POI
             break
-        h += _ENDPOINT_RING_HALF_M
+        h += _ENDPOINT_RING_STEP_FRAC * target_m  # expand: 10% → 15% → 20% …
 
     ring.sort(key=lambda p: _poi_score(p, selected_kinds, user_prefs), reverse=True)
     return ring[:_MAX_ENDPOINTS]
@@ -298,6 +302,33 @@ def _build_best_route_v2(
     return _fallback_even_sample(candidates, start_lat, start_lon, endpoints, num_pois)
 
 
+async def _fetch_pois_explicit(
+    otm: OpenTripMapClient,
+    lat: float,
+    lon: float,
+    radius: int,
+    selected_categories: list[str],
+) -> list[OTMPlace]:
+    """One parallel OTM call per user-facing category; merge and deduplicate.
+
+    Sending all kinds in a single request causes OTM to return the 500 nearest
+    POIs across all types, starving the outer ring of candidates.  Per-category
+    calls each get their own 500-slot budget and cover the full radius.
+    """
+    tasks = [
+        otm.fetch_radius(lat=lat, lon=lon, radius_m=radius, limit=_OTM_LIMIT, kinds=CATEGORIES[cat])
+        for cat in selected_categories if cat in CATEGORIES
+    ]
+    if not tasks:
+        return []
+    batches = await asyncio.gather(*tasks)
+    seen: dict[str, OTMPlace] = {}
+    for batch in batches:
+        for p in batch:
+            seen.setdefault(p.xid, p)
+    return list(seen.values())
+
+
 async def _fetch_pois_for_preferences(
     otm: OpenTripMapClient,
     lat: float,
@@ -326,9 +357,21 @@ async def _fetch_pois_for_preferences(
 
     pois: list[OTMPlace] = []
     for tier_idx, tier_keys in enumerate(tiers):
-        # Last tier: no kinds filter so OTM searches all interesting places
-        kinds_param = expand_categories(tier_keys) if tier_idx < len(tiers) - 1 else None
-        pois = await otm.fetch_radius(lat, lon, radius, limit=_OTM_LIMIT, kinds=kinds_param)
+        if tier_idx < len(tiers) - 1:
+            # Per-category parallel calls so each type gets its own 500-slot budget
+            tasks = [
+                otm.fetch_radius(lat=lat, lon=lon, radius_m=radius, limit=_OTM_LIMIT, kinds=CATEGORIES[k])
+                for k in tier_keys if k in CATEGORIES
+            ]
+            batches = await asyncio.gather(*tasks)
+            seen: dict[str, OTMPlace] = {}
+            for batch in batches:
+                for p in batch:
+                    seen.setdefault(p.xid, p)
+            pois = list(seen.values())
+        else:
+            # Last tier: no kinds filter — OTM searches all interesting places
+            pois = await otm.fetch_radius(lat, lon, radius, limit=_OTM_LIMIT, kinds=None)
 
         sectors = _assign_sectors(pois, lat, lon)
         best_sec = max(range(6), key=lambda s: len(sectors[s]))
@@ -391,9 +434,8 @@ async def generate_route(
         if not otm_kinds:
             raise ValueError("Не выбрано ни одной допустимой категории.")
         selected_kinds = set(otm_kinds)
-        pois = await otm.fetch_radius(
-            lat=start_lat, lon=start_lon,
-            radius_m=fetch_radius, limit=_OTM_LIMIT, kinds=otm_kinds,
+        pois = await _fetch_pois_explicit(
+            otm, start_lat, start_lon, fetch_radius, selected_categories,
         )
     else:
         pois = await _fetch_pois_for_preferences(
