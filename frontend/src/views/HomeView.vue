@@ -480,6 +480,10 @@ const suggestedPOI = ref<POI | null>(null)
 const addError = ref<string | null>(null)
 
 onMounted(() => {
+  if (routesStore.currentRoute?.status === 'draft') {
+    generatedRoute.value = routesStore.currentRoute
+    activeTab.value = 'create'
+  }
   if (!auth.isAuthenticated()) {
     showAuth.value = true
   }
