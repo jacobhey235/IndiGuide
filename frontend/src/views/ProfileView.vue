@@ -42,7 +42,7 @@
                 <span class="text-sm text-gray-900">{{ auth.user?.username }}</span>
               </div>
               <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-400 w-20 shrink-0">Email</span>
+                <span class="text-xs text-gray-400 w-20 shrink-0">Эл. почта</span>
                 <span class="text-sm text-gray-900 truncate">{{ auth.user?.email }}</span>
               </div>
               <div class="flex items-center gap-2">

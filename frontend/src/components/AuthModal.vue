@@ -36,7 +36,7 @@
           </div>
 
           <div>
-            <label class="mb-1 block text-sm font-medium text-gray-700">Email</label>
+            <label class="mb-1 block text-sm font-medium text-gray-700">Эл. почта</label>
             <input
               v-model="form.email"
               type="email"
