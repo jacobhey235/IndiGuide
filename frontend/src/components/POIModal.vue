@@ -86,6 +86,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoutesStore } from '@/stores/routes'
 import type { POI } from '@/types'
 import { translateKind } from '@/constants/kindTranslations'
+import { translateOpeningHours } from '@/constants/openingHoursTranslation'
 
 const props = defineProps<{ poi: POI; isOpen?: boolean | null }>()
 defineEmits<{ close: [] }>()
@@ -102,7 +103,10 @@ const kindsList = computed(() =>
     .slice(0, 5),
 )
 
-const openingHours = computed(() => detail.value?.opening_hours || props.poi.opening_hours || null)
+const openingHours = computed(() => {
+  const raw = detail.value?.opening_hours || props.poi.opening_hours || null
+  return raw ? translateOpeningHours(raw) : null
+})
 const isOpen = computed(() => props.isOpen ?? null)
 
 onMounted(async () => {

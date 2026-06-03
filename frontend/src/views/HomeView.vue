@@ -143,9 +143,23 @@
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-gray-900 truncate">{{ wp.poi.name }}</p>
-              <p v-if="wp.leg_duration_s" class="text-xs text-gray-400">
-                ~{{ Math.round(wp.leg_duration_s / 60) }} мин ходьбы
-              </p>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <p v-if="wp.leg_duration_s" class="text-xs text-gray-400">
+                  ~{{ Math.round(wp.leg_duration_s / 60) }} мин ходьбы
+                </p>
+                <span
+                  v-if="wp.is_open === true"
+                  class="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700"
+                >Открыто</span>
+                <span
+                  v-else-if="wp.is_open === false"
+                  class="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
+                >Закрыто</span>
+              </div>
+              <p
+                v-if="wp.poi.opening_hours"
+                class="text-[11px] text-gray-400 mt-0.5 line-clamp-1"
+              >{{ translateOpeningHours(wp.poi.opening_hours) }}</p>
             </div>
             <div v-if="generatedRoute.status === 'draft'" class="flex flex-col gap-0.5 flex-shrink-0">
               <button
@@ -366,9 +380,23 @@
               </div>
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-gray-900 truncate">{{ wp.poi.name }}</p>
-                <p v-if="wp.leg_duration_s" class="text-xs text-gray-400">
-                  ~{{ Math.round(wp.leg_duration_s / 60) }} мин ходьбы
-                </p>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                  <p v-if="wp.leg_duration_s" class="text-xs text-gray-400">
+                    ~{{ Math.round(wp.leg_duration_s / 60) }} мин ходьбы
+                  </p>
+                  <span
+                    v-if="wp.is_open === true"
+                    class="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700"
+                  >Открыто</span>
+                  <span
+                    v-else-if="wp.is_open === false"
+                    class="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
+                  >Закрыто</span>
+                </div>
+                <p
+                  v-if="wp.poi.opening_hours"
+                  class="text-[11px] text-gray-400 mt-0.5 line-clamp-1"
+                >{{ translateOpeningHours(wp.poi.opening_hours) }}</p>
               </div>
               <div v-if="generatedRoute.status === 'draft'" class="flex flex-col gap-0.5 flex-shrink-0">
                 <button
@@ -448,6 +476,7 @@ import CityPicker from '@/components/CityPicker.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRoutesStore } from '@/stores/routes'
 import type { Route, POI } from '@/types'
+import { translateOpeningHours } from '@/constants/openingHoursTranslation'
 
 const router = useRouter()
 const auth = useAuthStore()

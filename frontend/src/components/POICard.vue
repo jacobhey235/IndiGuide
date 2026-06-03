@@ -29,11 +29,15 @@
           >Закрыто</span>
         </template>
       </div>
+      <p
+        v-if="showOpeningHours !== false && waypoint.poi.opening_hours"
+        class="text-[11px] text-gray-400 mt-0.5 line-clamp-2"
+      >{{ translateOpeningHours(waypoint.poi.opening_hours) }}</p>
     </div>
 
     <!-- Walk time from previous -->
     <div v-if="waypoint.leg_duration_s" class="flex-shrink-0 text-right">
-      <span class="text-xs text-gray-400">~{{ Math.ceil(waypoint.leg_duration_s / 60) }} min</span>
+      <span class="text-xs text-gray-400">~{{ Math.ceil(waypoint.leg_duration_s / 60) }} мин</span>
     </div>
 
     <!-- Edit mode controls -->
@@ -52,6 +56,7 @@
 import { computed } from 'vue'
 import type { Waypoint } from '@/types'
 import { translateKind } from '@/constants/kindTranslations'
+import { translateOpeningHours } from '@/constants/openingHoursTranslation'
 
 const props = defineProps<{
   waypoint: Waypoint

@@ -464,8 +464,8 @@ async def generate_route(
     is_explicit = bool(selected_categories)
 
     otm = OpenTripMapClient(http_client)
-    # Search all tourist POIs within (route length + 1 km) of the start point.
-    fetch_radius = max(int(distance_m + 1000), 500)
+    # Search all tourist POIs within the user-specified route length.
+    fetch_radius = max(int(distance_m), 500)
 
     # 1. Fetch POIs in (distance + 1 km) radius
     if is_explicit:
@@ -554,8 +554,9 @@ async def generate_route(
         )
 
     await _upsert_pois(db, ordered_pois)
-    if oh_map:
-        await _store_opening_hours(oh_map, db)
+    if not oh_map:
+        oh_map = await _get_opening_hours_map(ordered_pois, db, http_client)
+    await _store_opening_hours(oh_map, db)
     await db.commit()
 
     route_name = name or f"Маршрут от {datetime.now(timezone.utc).strftime('%d.%m')}"

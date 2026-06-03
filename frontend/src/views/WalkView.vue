@@ -95,6 +95,10 @@
               class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
             >Закрыто</span>
           </div>
+          <p
+            v-if="nextWaypoint.poi.opening_hours"
+            class="mt-1.5 text-xs text-gray-400"
+          >{{ translateOpeningHours(nextWaypoint.poi.opening_hours) }}</p>
         </div>
 
         <div v-else class="mb-4 text-center py-4">
@@ -171,6 +175,7 @@ import POIModal from '@/components/POIModal.vue'
 import { useRoutesStore } from '@/stores/routes'
 import type { POI } from '@/types'
 import { translateKind } from '@/constants/kindTranslations'
+import { translateOpeningHours } from '@/constants/openingHoursTranslation'
 
 const vRoute = useRoute()
 const router = useRouter()

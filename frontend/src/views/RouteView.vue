@@ -240,7 +240,7 @@ const addError = ref<string | null>(null)
 const route = computed(() => store.currentRoute)
 
 const hasOpeningHours = computed(() =>
-  route.value?.waypoints.some((wp) => wp.is_open !== null) ?? false,
+  route.value?.waypoints.some((wp) => wp.is_open !== null || Boolean(wp.poi.opening_hours)) ?? false,
 )
 
 const statusColor = computed(() => ({
