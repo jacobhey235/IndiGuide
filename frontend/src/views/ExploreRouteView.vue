@@ -41,7 +41,7 @@
           <div class="flex-1 min-w-0">
             <p class="text-sm font-medium text-gray-900 truncate">{{ wp.poi.name }}</p>
             <p v-if="wp.leg_duration_s" class="text-xs text-gray-400">
-              ~{{ Math.round(wp.leg_duration_s / 60) }} мин ходьбы
+              ~{{ Math.ceil(wp.leg_duration_s / 60) }} мин ходьбы
             </p>
           </div>
         </div>

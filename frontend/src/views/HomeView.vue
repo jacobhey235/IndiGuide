@@ -145,7 +145,7 @@
               <p class="text-sm font-medium text-gray-900 truncate">{{ wp.poi.name }}</p>
               <div class="flex items-center gap-1.5 mt-0.5">
                 <p v-if="wp.leg_duration_s" class="text-xs text-gray-400">
-                  ~{{ Math.round(wp.leg_duration_s / 60) }} мин ходьбы
+                  ~{{ Math.ceil(wp.leg_duration_s / 60) }} мин ходьбы
                 </p>
                 <span
                   v-if="wp.is_open === true"
@@ -382,7 +382,7 @@
                 <p class="text-sm font-medium text-gray-900 truncate">{{ wp.poi.name }}</p>
                 <div class="flex items-center gap-1.5 mt-0.5">
                   <p v-if="wp.leg_duration_s" class="text-xs text-gray-400">
-                    ~{{ Math.round(wp.leg_duration_s / 60) }} мин ходьбы
+                    ~{{ Math.ceil(wp.leg_duration_s / 60) }} мин ходьбы
                   </p>
                   <span
                     v-if="wp.is_open === true"
