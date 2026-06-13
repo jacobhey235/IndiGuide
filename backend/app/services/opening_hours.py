@@ -10,7 +10,7 @@ def check_open(opening_hours_str: str | None, client_utc_offset: int = 0) -> boo
     if not opening_hours_str:
         return None
     try:
-        from opening_hours import OpeningHours  # Rust-backed, lazy import
+        from opening_hours import OpeningHours
 
         local_now = (datetime.now(timezone.utc) + timedelta(minutes=client_utc_offset)).replace(
             tzinfo=None

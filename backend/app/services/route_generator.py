@@ -21,13 +21,13 @@ from app.services.preferences import get_disliked_poi_xids, get_preference_map
 from app.services.route_categories import CATEGORIES
 from app.services.route_categories import expand as expand_categories
 
-_OTM_LIMIT = 500              # OpenTripMap API hard limit
-_WALKING_FACTOR = 1.3         # real walking distance ≈ 1.3× straight-line haversine
-_ENDPOINT_RING_INIT_FRAC = 0.10   # initial half-width of endpoint ring as fraction of target distance
-_ENDPOINT_RING_STEP_FRAC = 0.05   # expansion step when ring is empty (→ 15%, 20%, …)
-_CORRIDOR_HALF_M = 400        # base perpendicular half-width of the start→end corridor (m)
-_MAX_ENDPOINTS = 60           # cap on endpoint candidates evaluated
-_DISTANCE_TOLERANCE_FRAC = 0.2  # accept routes whose estimated length is within ±20% of target
+_OTM_LIMIT = 500
+_WALKING_FACTOR = 1.3
+_ENDPOINT_RING_INIT_FRAC = 0.10
+_ENDPOINT_RING_STEP_FRAC = 0.05
+_CORRIDOR_HALF_M = 400
+_MAX_ENDPOINTS = 60
+_DISTANCE_TOLERANCE_FRAC = 0.2
 
 
 def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -98,8 +98,6 @@ def _assign_sectors(
 
 
 def _to_local_xy(lat: float, lon: float, lat0: float, lon0: float) -> tuple[float, float]:
-    """Equirectangular projection to local metres (x=east, y=north) relative to (lat0, lon0).
-    Accurate at city scale (a few km)."""
     R = 6_371_000
     x = math.radians(lon - lon0) * math.cos(math.radians(lat0)) * R
     y = math.radians(lat - lat0) * R
@@ -114,24 +112,21 @@ def _select_endpoints(
     selected_kinds: set[str],
     user_prefs: dict[str, float],
 ) -> list[OTMPlace]:
-    """Endpoint candidates: POIs whose straight-line distance from start lies in a ring
-    centred on r_target. The endpoint fixes both the direction and the length of the route.
-    The ring is widened (relaxation) until at least one candidate appears."""
     with_dist = [(p, haversine(start_lat, start_lon, p.lat, p.lon)) for p in pois]
     if not with_dist:
         return []
     max_dist = max(d for _, d in with_dist)
 
-    target_m = r_target * _WALKING_FACTOR  # user-specified walking distance
+    target_m = r_target * _WALKING_FACTOR
     h_step = _ENDPOINT_RING_INIT_FRAC * target_m
     h = min(h_step, 0.6 * r_target)
     ring: list[OTMPlace] = []
     while not ring:
         lo, hi = r_target - h, r_target + h
         ring = [p for p, d in with_dist if lo <= d <= hi]
-        if ring or h >= r_target + max_dist:  # found, or ring already spans every POI
+        if ring or h >= r_target + max_dist:
             break
-        h += _ENDPOINT_RING_STEP_FRAC * target_m  # expand: 10% → 15% → 20% …
+        h += _ENDPOINT_RING_STEP_FRAC * target_m
 
     ring.sort(key=lambda p: _poi_score(p, selected_kinds, user_prefs), reverse=True)
     return ring[:_MAX_ENDPOINTS]
@@ -146,17 +141,12 @@ def _build_corridor_route(
     selected_kinds: set[str],
     user_prefs: dict[str, float],
 ) -> list[OTMPlace]:
-    """Lay out exactly num_pois POIs (end being the last) along the start→end axis so the
-    path is linear and evenly spaced. Intermediate points are chosen one per equal-length
-    slot of the axis, preferring points close to the line with a high POI score. Returns the
-    ordered route start→…→end, or [] when num_pois cannot be filled even after relaxing."""
     ex, ey = _to_local_xy(end.lat, end.lon, start_lat, start_lon)
     seg_len2 = ex * ex + ey * ey
     if seg_len2 <= 0:
         return []
     seg_len = math.sqrt(seg_len2)
 
-    # Project every candidate onto the axis: t = progress fraction, perp = offset in metres.
     projected: list[tuple[OTMPlace, float, float]] = []
     for p in pool:
         if p.xid == end.xid:
@@ -189,7 +179,6 @@ def _build_corridor_route(
             ]
             if window:
                 break
-            # Relaxation: widen the slot window along the axis and the corridor width.
             t_pad += 0.5 / num_pois
             corridor_half += _CORRIDOR_HALF_M
             if t_pad >= 1.0 and corridor_half >= seg_len:
@@ -218,9 +207,6 @@ def _fallback_even_sample(
     endpoints: list[OTMPlace],
     num_pois: int,
 ) -> list[OTMPlace]:
-    """Last-resort guarantee of exactly num_pois points: project all candidates onto the
-    axis of the endpoint that captures the most of them, then sample num_pois evenly by
-    progress. Returns [] only when fewer than num_pois candidates exist in total."""
     if len(candidates) < num_pois:
         return []
 
@@ -259,9 +245,6 @@ def _build_best_route_v2(
     user_prefs: dict[str, float],
     target_distance_m: float,
 ) -> list[OTMPlace]:
-    """Pick an endpoint from the outer ring, build a linear corridor route to it, and keep
-    the most linear + uniform variant whose estimated length is within ±tolerance of the
-    target. Always returns exactly num_pois points unless the area physically holds fewer."""
     r_target = target_distance_m / _WALKING_FACTOR
     endpoints = _select_endpoints(
         candidates, start_lat, start_lon, r_target, selected_kinds, user_prefs
@@ -302,7 +285,6 @@ def _build_best_route_v2(
     if len(result) == num_pois:
         return result
 
-    # Count guarantee: no endpoint yielded a full corridor route → even-sample instead.
     return _fallback_even_sample(candidates, start_lat, start_lon, endpoints, num_pois)
 
 
@@ -464,10 +446,8 @@ async def generate_route(
     is_explicit = bool(selected_categories)
 
     otm = OpenTripMapClient(http_client)
-    # Search all tourist POIs within the user-specified route length.
     fetch_radius = max(int(distance_m), 500)
 
-    # 1. Fetch POIs in (distance + 1 km) radius
     if is_explicit:
         otm_kinds = expand_categories(selected_categories)
         if not otm_kinds:
@@ -497,9 +477,6 @@ async def generate_route(
             "Попробуйте увеличить расстояние или изменить категории."
         )
 
-    # 2. Pick an endpoint from the outer ring (r_target = distance / walking factor) that
-    #    sets the route's direction and length, then lay out a linear, evenly spaced
-    #    corridor of exactly num_pois points toward it.
     ordered_pois = _build_best_route_v2(
         candidates=pois,
         start_lat=start_lat,
@@ -516,7 +493,6 @@ async def generate_route(
             "Попробуйте увеличить расстояние или изменить категории."
         )
 
-    # 3b. Filter out closed POIs if requested (one rebuild attempt)
     oh_map: dict[str, str | None] = {}
     if filter_open_now:
         oh_map = await _get_opening_hours_map(ordered_pois, db, http_client)
@@ -541,7 +517,6 @@ async def generate_route(
                     oh_map.update(extra)
                 ordered_pois = rebuilt
 
-    # 4. Build walking route via OSRM
     waypoints = [(start_lat, start_lon)] + [(p.lat, p.lon) for p in ordered_pois]
     osrm = OSRMClient(http_client)
     try:
